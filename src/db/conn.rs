@@ -6,13 +6,13 @@ use std::{
 
 use rusqlite::Connection;
 
-const DB_NAME: &str = "cclite.db";
+const DB_NAME: &str = "tascli.db";
 
 fn get_data_dir() -> PathBuf {
     let home_dir = env::var_os("HOME")
         .map(PathBuf::from)
         .expect("$HOME environment variable not set");
-    let data_dir = home_dir.join(".local").join("share").join("cclite");
+    let data_dir = home_dir.join(".local").join("share").join("tascli");
     fs::create_dir_all(&data_dir).expect("Failed to create data directory");
     data_dir
 }
