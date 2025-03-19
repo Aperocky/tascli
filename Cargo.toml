@@ -11,3 +11,7 @@ path = "src/main.rs"
 clap = { version = "4.5.32", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1.11"
+rusqlite = "0.34.0"
+
+[dev-dependencies]
+tempfile = "3.19.0"
