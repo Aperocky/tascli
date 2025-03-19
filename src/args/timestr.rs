@@ -5,8 +5,18 @@ use chrono::{
     NaiveDate,
     NaiveDateTime,
     NaiveTime,
+    TimeZone,
     Weekday,
 };
+
+pub fn to_unix_epoch(s: &str) -> Result<i64, String> {
+    let dt = parse_flexible_timestr(s)?;
+    Local
+        .from_local_datetime(&dt)
+        .earliest()
+        .ok_or_else(|| String::from("cannot parse timestr into unix epoch"))
+        .map(|dt| dt.timestamp())
+}
 
 pub fn parse_flexible_timestr(s: &str) -> Result<NaiveDateTime, String> {
     let s = s.trim();
@@ -133,6 +143,8 @@ fn next_weekday(from_date: NaiveDate, weekday: Weekday) -> NaiveDate {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+
     use super::*;
 
     #[test]
@@ -161,6 +173,13 @@ mod tests {
                 input,
                 result.err()
             );
+            let unix_epoch = to_unix_epoch(input);
+            assert!(
+                unix_epoch.is_ok(),
+                "Should parse valid input '{}' but got error: {:?}",
+                input,
+                unix_epoch.err()
+            );
         }
     }
 
@@ -187,5 +206,25 @@ mod tests {
                 input
             );
         }
+    }
+
+    #[test]
+    fn test_unix_epoch() {
+        let btime = "2025-02-23 20:35:00";
+        let local_dt = Local.datetime_from_str(btime, "%Y-%m-%d %H:%M:%S").unwrap();
+        let utc_dt = local_dt.with_timezone(&Utc);
+        let expected_timestamp = utc_dt.timestamp();
+
+        let unix_epoch = to_unix_epoch(btime).unwrap();
+        assert_eq!(
+            unix_epoch,
+            expected_timestamp,
+            "to_unix_epoch should use local timezone in conversion. \
+             Expected timestamp: {} (using local timezone: {}), \
+             but got: {}",
+            expected_timestamp,
+            Local::now().offset(),
+            unix_epoch
+        );
     }
 }
