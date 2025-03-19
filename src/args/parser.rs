@@ -16,6 +16,8 @@ pub enum Action {
     Record(RecordCommand),
     /// Finish task or remove records
     Done(DoneCommand),
+    /// Update tasks or records wording/deadlines
+    Update(UpdateCommand),
     /// list tasks or records
     #[command(subcommand)]
     List(ListCommand),
@@ -25,12 +27,12 @@ pub enum Action {
 pub struct TaskCommand {
     /// Description of the task
     pub content: String,
-    /// Category of the task
-    #[arg(short, long)]
-    pub category: Option<String>,
     /// Time the task is due, default to EOD
     #[arg(value_parser = validate_timestr)]
     pub timestr: Option<String>,
+    /// Category of the task
+    #[arg(short, long)]
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -49,9 +51,24 @@ pub struct RecordCommand {
 pub struct DoneCommand {
     /// Index from previous List command
     pub index: u32,
-    /// Closing code, [done|cancelled|remove]
+    /// Closing code, [done|cancelled|remove], default to done.
     #[arg(short, long, value_parser = parse_closing_code)]
     pub closing_code: Option<u8>,
+}
+
+#[derive(Debug, Args)]
+pub struct UpdateCommand {
+    /// Index from previous List command
+    pub index: u32,
+    /// Update target completion time.
+    #[arg(short, long, value_parser = validate_timestr)]
+    pub target_time: Option<u8>,
+    /// Update all of content
+    #[arg(short, long)]
+    pub content: Option<String>,
+    /// Add to content
+    #[arg(short, long)]
+    pub add_content: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -91,7 +108,7 @@ fn validate_timestr(s: &str) -> Result<String, String> {
 fn parse_closing_code(s: &str) -> Result<u8, String> {
     match s.to_lowercase().as_str() {
         "ongoing" => Ok(0), // This is default.
-        "complete" | "done" | "completed" => Ok(1),
+        "done" | "complete" | "completed" => Ok(1),
         "cancelled" | "canceled" | "cancel" => Ok(2),
         "duplicate" => Ok(3),
         "removed" | "remove" => Ok(4),
