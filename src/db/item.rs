@@ -73,6 +73,92 @@ impl Item {
     }
 }
 
+// Query Struct for querying items from db
+pub struct ItemQuery<'a> {
+    pub action: Option<&'a str>,
+    pub category: Option<&'a str>,
+    pub create_time_min: Option<i64>,
+    pub create_time_max: Option<i64>,
+    pub target_time_min: Option<i64>,
+    pub target_time_max: Option<i64>,
+    pub closing_code: Option<u8>,
+    pub limit: Option<usize>,
+    pub offset_id: Option<i64>,
+}
+
+impl<'a> ItemQuery<'a> {
+    pub fn new() -> Self {
+        ItemQuery {
+            action: None,
+            category: None,
+            create_time_min: None,
+            create_time_max: None,
+            target_time_min: None,
+            target_time_max: None,
+            closing_code: None,
+            limit: None,
+            offset_id: None,
+        }
+    }
+
+    pub fn with_action(mut self, action: &'a str) -> Self {
+        self.action = Some(action);
+        self
+    }
+
+    pub fn with_category(mut self, category: &'a str) -> Self {
+        self.category = Some(category);
+        self
+    }
+
+    pub fn with_create_time_range(mut self, min: Option<i64>, max: Option<i64>) -> Self {
+        self.create_time_min = min;
+        self.create_time_max = max;
+        self
+    }
+
+    pub fn with_target_time_range(mut self, min: Option<i64>, max: Option<i64>) -> Self {
+        self.target_time_min = min;
+        self.target_time_max = max;
+        self
+    }
+
+    pub fn with_create_time_min(mut self, create_time_min: i64) -> Self {
+        self.create_time_min = Some(create_time_min);
+        self
+    }
+
+    pub fn with_create_time_max(mut self, create_time_max: i64) -> Self {
+        self.create_time_max = Some(create_time_max);
+        self
+    }
+
+    pub fn with_target_time_min(mut self, target_time_min: i64) -> Self {
+        self.target_time_min = Some(target_time_min);
+        self
+    }
+
+    pub fn with_target_time_max(mut self, target_time_max: i64) -> Self {
+        self.target_time_max = Some(target_time_max);
+        self
+    }
+
+    pub fn with_closing_code(mut self, closing_code: u8) -> Self {
+        self.closing_code = Some(closing_code);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    pub fn with_offset_id(mut self, offset_id: i64) -> Self {
+        self.offset_id = Some(offset_id);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,5 +213,54 @@ mod tests {
         );
 
         assert_eq!(item.create_time, create_time);
+    }
+
+    #[test]
+    fn test_item_query_builder() {
+        // Test default values from new()
+        let query = ItemQuery::new();
+        assert_eq!(query.action, None);
+        assert_eq!(query.category, None);
+        assert_eq!(query.create_time_min, None);
+        assert_eq!(query.create_time_max, None);
+        assert_eq!(query.target_time_min, None);
+        assert_eq!(query.target_time_max, None);
+        assert_eq!(query.closing_code, None);
+        assert_eq!(query.limit, None);
+        assert_eq!(query.offset_id, None);
+
+        let query = ItemQuery::new().with_action("task");
+        assert_eq!(query.action, Some("task"));
+
+        let query = ItemQuery::new().with_create_time_range(Some(1000), Some(2000));
+        assert_eq!(query.create_time_min, Some(1000));
+        assert_eq!(query.create_time_max, Some(2000));
+
+        let query = ItemQuery::new().with_target_time_range(Some(3000), Some(4000));
+        assert_eq!(query.target_time_min, Some(3000));
+        assert_eq!(query.target_time_max, Some(4000));
+
+        let query = ItemQuery::new().with_closing_code(1);
+        assert_eq!(query.closing_code, Some(1));
+
+        let query = ItemQuery::new().with_limit(100);
+        assert_eq!(query.limit, Some(100));
+
+        // Test chaining
+        let query = ItemQuery::new()
+            .with_action("record")
+            .with_category("feeding")
+            .with_create_time_min(40000)
+            .with_limit(100);
+
+        assert_eq!(query.action, Some("record"));
+        assert_eq!(query.category, Some("feeding"));
+        assert_eq!(query.create_time_min, Some(40000));
+        assert_eq!(query.create_time_max, None);
+        assert_eq!(query.target_time_min, None);
+        assert_eq!(query.target_time_max, None);
+        assert_eq!(query.closing_code, None);
+        assert_eq!(query.limit, Some(100));
+        assert_eq!(query.offset_id, None);
     }
 }

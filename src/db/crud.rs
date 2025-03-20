@@ -10,7 +10,10 @@ use rusqlite::{
     Result,
 };
 
-use crate::db::item::Item;
+use crate::db::item::{
+    Item,
+    ItemQuery,
+};
 
 pub fn insert_item(conn: &Connection, item: &Item) -> Result<i64> {
     conn.execute(
@@ -66,60 +69,69 @@ pub fn get_item(conn: &Connection, item_id: i64) -> Result<Item, rusqlite::Error
 #[allow(clippy::too_many_arguments)]
 pub fn query_items(
     conn: &Connection,
-    action: Option<&str>,
-    category: Option<&str>,
-    create_time_min: Option<i64>,
-    create_time_max: Option<i64>,
-    target_time_min: Option<i64>,
-    target_time_max: Option<i64>,
-    closing_code: Option<u8>,
+    item_query: &ItemQuery,
 ) -> Result<Vec<Item>, rusqlite::Error> {
     let mut conditions = Vec::new();
     let mut params = Vec::new();
 
-    if let Some(a) = action {
+    if let Some(a) = item_query.action {
         conditions.push("action = ?");
         params.push(a.to_string());
     }
 
-    if let Some(c) = category {
+    if let Some(c) = item_query.category {
         conditions.push("category = ?");
         params.push(c.to_string());
     }
 
-    if let Some(ct_min) = create_time_min {
+    if let Some(ct_min) = item_query.create_time_min {
         conditions.push("create_time >= ?");
         params.push(ct_min.to_string());
     }
 
-    if let Some(ct_max) = create_time_max {
+    if let Some(ct_max) = item_query.create_time_max {
         conditions.push("create_time <= ?");
         params.push(ct_max.to_string());
     }
 
-    if let Some(tt_min) = target_time_min {
+    if let Some(tt_min) = item_query.target_time_min {
         conditions.push("target_time >= ?");
         params.push(tt_min.to_string());
     }
 
-    if let Some(tt_max) = target_time_max {
+    if let Some(tt_max) = item_query.target_time_max {
         conditions.push("target_time <= ?");
         params.push(tt_max.to_string());
     }
 
-    if let Some(cc) = closing_code {
+    if let Some(cc) = item_query.closing_code {
         conditions.push("closing_code = ?");
         params.push(cc.to_string());
     }
 
-    // Build the query
-    let mut query = String::from("SELECT * FROM items");
+    let mut querystr = String::from("SELECT * FROM items");
     if !conditions.is_empty() {
-        query.push_str(" WHERE ");
-        query.push_str(&conditions.join(" AND "));
+        querystr.push_str(" WHERE ");
+        querystr.push_str(&conditions.join(" AND "));
     }
 
-    let mut stmt = conn.prepare(&query)?;
+    if let Some(offset_id) = item_query.offset_id {
+        if conditions.is_empty() {
+            querystr.push_str(" WHERE id > ?");
+        } else {
+            querystr.push_str(" AND id > ?");
+        }
+        params.push(offset_id.to_string());
+    }
+
+    querystr.push_str(" ORDER BY id ASC");
+
+    if let Some(limit) = item_query.limit {
+        querystr.push_str(" LIMIT ?");
+        params.push(limit.to_string());
+    }
+
+    let mut stmt = conn.prepare(&querystr)?;
 
     let item_iter = stmt.query_map(params_from_iter(params), Item::from_row)?;
 
@@ -211,16 +223,8 @@ mod tests {
             insert_item(&conn, &test_feeding).unwrap();
         }
 
-        let work_items = query_items(
-            &conn,
-            Some("task"),
-            Some("work"),
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let item_query = ItemQuery::new().with_action("task").with_category("work");
+        let work_items = query_items(&conn, &item_query);
         assert!(
             work_items.is_ok(),
             "Error querying items: {:?}",
@@ -234,18 +238,8 @@ mod tests {
             assert!(item.content.starts_with("meeting"));
         }
 
-        // Test query for feedings (life category)
-        let life_items = query_items(
-            &conn,
-            Some("task"),
-            Some("life"),
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        let item_query = ItemQuery::new().with_action("task").with_category("life");
+        let life_items = query_items(&conn, &item_query).unwrap();
         assert_eq!(life_items.len(), 3);
         for item in &life_items {
             assert_eq!(item.action, "task");
@@ -253,24 +247,13 @@ mod tests {
             assert!(item.content.starts_with("feeding"));
         }
 
-        let all_items = query_items(&conn, None, None, None, None, None, None, None).unwrap();
+        let all_items = query_items(&conn, &ItemQuery::new()).unwrap();
         assert_eq!(all_items.len(), 8);
 
-        let task_items =
-            query_items(&conn, Some("task"), None, None, None, None, None, None).unwrap();
+        let task_items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
         assert_eq!(task_items.len(), 8);
 
-        let empty_items = query_items(
-            &conn,
-            Some("record"),
-            Some("feeding"),
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        let empty_items = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
         assert_eq!(empty_items.len(), 0);
     }
 }
