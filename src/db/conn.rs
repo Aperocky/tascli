@@ -22,7 +22,7 @@ fn get_db_path() -> PathBuf {
     data_dir.join(DB_NAME)
 }
 
-pub(super) fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
+pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
@@ -55,6 +55,15 @@ pub(super) fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_category_target_time ON items(category, target_time)",
+        [],
+    )?;
+
+    // Create cache table for list commands
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS cache (
+            key INTEGER PRIMARY KEY,
+            value INTEGER NOT NULL
+        )",
         [],
     )?;
 
@@ -92,12 +101,18 @@ mod tests {
             result.err()
         );
 
-        let table_exists = conn.query_row(
+        let item_table_exists = conn.query_row(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='items'",
             [],
             |row: &Row| row.get::<_, String>(0),
         );
-        assert!(table_exists.is_ok(), "Table 'items' does not exist");
+        assert!(item_table_exists.is_ok(), "Table 'items' does not exist");
+        let cache_table_exists = conn.query_row(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='cache'",
+            [],
+            |row: &Row| row.get::<_, String>(0),
+        );
+        assert!(cache_table_exists.is_ok(), "Table 'cache' does not exist");
 
         let second_result = init_table(&conn);
         assert!(

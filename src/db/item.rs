@@ -37,9 +37,9 @@ impl Item {
     }
 
     pub fn with_target_time(
-        content: String,
         action: String,
         category: String,
+        content: String,
         target_time: Option<i64>,
     ) -> Self {
         let mut item = Self::new(action, category, content);
@@ -49,9 +49,9 @@ impl Item {
 
     // For backfills
     pub fn with_create_time(
-        content: String,
         action: String,
         category: String,
+        content: String,
         create_time: i64,
     ) -> Self {
         let mut item = Self::new(action, category, content);
@@ -103,9 +103,9 @@ mod tests {
             + 3600; // One hour in the future
 
         let item = Item::with_target_time(
-            "content".to_string(),
             "action".to_string(),
             "category".to_string(),
+            "content".to_string(),
             Some(target_time),
         );
 
@@ -120,9 +120,9 @@ mod tests {
         let create_time = 1700000000;
 
         let item = Item::with_create_time(
-            "content".to_string(),
             "action".to_string(),
             "category".to_string(),
+            "content".to_string(),
             create_time,
         );
 
