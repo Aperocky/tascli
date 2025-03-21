@@ -80,19 +80,14 @@ pub fn connect() -> Result<Connection, rusqlite::Error> {
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::{
-        Connection,
-        Row,
-    };
-    use tempfile::NamedTempFile;
+    use rusqlite::Row;
 
     use super::*;
+    use crate::tests::get_test_conn;
 
     #[test]
     fn test_init_table() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let db_path = temp_file.path().to_str().unwrap();
-        let conn = Connection::open(db_path).unwrap();
+        let (conn, _temp_file) = get_test_conn();
 
         let result = init_table(&conn);
         assert!(

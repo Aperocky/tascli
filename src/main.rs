@@ -1,3 +1,4 @@
+mod actions;
 mod args;
 mod db;
 
@@ -6,14 +7,12 @@ use clap::Parser;
 
 fn main() {
     let cli_args = CliArgs::parse();
-    match db::conn::connect() {
-        Ok(_) => {
-            println!("db established successfully")
-        }
-        Err(e) => {
-            println!("Sqlite error {}", e)
-        }
+    let conn = db::conn::connect().unwrap();
+    let result = actions::handler::handle_commands(&conn, cli_args);
+    if result.is_err() {
+        println!("Error executing tascli: {:?}", result.unwrap_err());
     }
-
-    println!("{:?}", cli_args);
 }
+
+#[cfg(test)]
+pub mod tests;

@@ -145,12 +145,10 @@ pub fn query_items(
 
 #[cfg(test)]
 mod tests {
-    use tempfile::NamedTempFile;
-
     use super::*;
-    use crate::db::{
-        conn::init_table,
-        item::Item,
+    use crate::{
+        db::item::Item,
+        tests::get_test_conn,
     };
 
     fn get_test_item(action: &str, category: &str, content: &str) -> Item {
@@ -159,14 +157,6 @@ mod tests {
             category.to_string(),
             content.to_string(),
         )
-    }
-
-    fn get_test_conn() -> (Connection, NamedTempFile) {
-        let temp_file = NamedTempFile::new().unwrap();
-        let db_path = temp_file.path().to_str().unwrap();
-        let conn = Connection::open(db_path).unwrap();
-        init_table(&conn).unwrap();
-        (conn, temp_file)
     }
 
     #[test]

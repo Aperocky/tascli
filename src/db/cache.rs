@@ -48,18 +48,8 @@ pub fn clear(conn: &Connection) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::NamedTempFile;
-
     use super::*;
-    use crate::db::conn::init_table;
-
-    fn get_test_conn() -> (Connection, NamedTempFile) {
-        let temp_file = NamedTempFile::new().unwrap();
-        let db_path = temp_file.path().to_str().unwrap();
-        let conn = Connection::open(db_path).unwrap();
-        init_table(&conn).unwrap();
-        (conn, temp_file)
-    }
+    use crate::tests::get_test_conn;
 
     #[test]
     fn test_cache() {
