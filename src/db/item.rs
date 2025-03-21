@@ -14,7 +14,7 @@ pub struct Item {
     pub create_time: i64,
     pub target_time: Option<i64>,
     pub modify_time: Option<i64>,
-    pub closing_code: Option<u8>,
+    pub closing_code: u8,
 }
 
 impl Item {
@@ -32,7 +32,7 @@ impl Item {
             create_time: now,
             target_time: None,
             modify_time: None,
-            closing_code: None,
+            closing_code: 0,
         }
     }
 
@@ -177,7 +177,7 @@ mod tests {
         assert!(item.id.is_none());
         assert!(item.target_time.is_none());
         assert!(item.modify_time.is_none());
-        assert!(item.closing_code.is_none());
+        assert_eq!(item.closing_code, 0);
     }
 
     #[test]

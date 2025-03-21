@@ -9,6 +9,18 @@ use chrono::{
     Weekday,
 };
 
+pub fn days_before_to_unix_epoch(d: usize) -> i64 {
+    let now = Local::now();
+    let past_date = now - Duration::days(d as i64);
+    past_date.timestamp()
+}
+
+pub fn days_after_to_unix_epoch(d: usize) -> i64 {
+    let now = Local::now();
+    let future_date = now + Duration::days(d as i64);
+    future_date.timestamp()
+}
+
 pub fn to_unix_epoch(s: &str) -> Result<i64, String> {
     let dt = parse_flexible_timestr(s)?;
     Local

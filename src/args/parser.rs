@@ -50,16 +50,16 @@ pub struct RecordCommand {
 #[derive(Debug, Args)]
 pub struct DoneCommand {
     /// Index from previous List command
-    pub index: u32,
+    pub index: usize,
     /// Closing code, [done|cancelled|remove], default to done.
-    #[arg(short, long, value_parser = parse_closing_code)]
-    pub closing_code: Option<u8>,
+    #[arg(short, long, value_parser = parse_closing_code, default_value_t = 1)]
+    pub closing_code: u8,
 }
 
 #[derive(Debug, Args)]
 pub struct UpdateCommand {
     /// Index from previous List command
-    pub index: u32,
+    pub index: usize,
     /// Update target completion time.
     #[arg(short, long, value_parser = validate_timestr)]
     pub target_time: Option<u8>,
@@ -69,6 +69,9 @@ pub struct UpdateCommand {
     /// Add to content
     #[arg(short, long)]
     pub add_content: Option<String>,
+    /// Edit the status of the tasks
+    #[arg(short, long, value_parser = parse_closing_code)]
+    pub status: Option<u8>
 }
 
 #[derive(Debug, Subcommand)]
@@ -86,6 +89,19 @@ pub struct ListTaskCommand {
     /// Category of the task
     #[arg(short, long)]
     pub category: Option<String>,
+    /// days in the future for tasks to list - mutually exclusive with timestr
+    #[arg(short, long)]
+    pub days: Option<usize>,
+    /// Status to list, default to ongoing tasks
+    #[arg(short, long, value_parser = parse_closing_code, default_value_t = 0)]
+    pub status: u8,
+    /// Show overdue tasks - tasks that are scheduled to be completed in the past, but were not
+    /// closed. It is assumed that they are already done by default.
+    #[arg(short, long, default_value_t = false)]
+    pub overdue: bool,
+    /// Limit the amount of tasks returned
+    #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
+    pub limit: usize,
 }
 
 #[derive(Debug, Args)]
@@ -93,9 +109,21 @@ pub struct ListRecordCommand {
     /// Category of the record
     #[arg(short, long)]
     pub category: Option<String>,
-    /// days of records to retrieve - e.g. 1 shows record made in the last 24 hours
+    /// days of records to retrieve - e.g. 1 shows record made in the last 24 hours.
+    /// value of 7 would show record made in the past week.
     #[arg(short, long)]
-    pub days: Option<u32>
+    pub days: Option<usize>,
+    /// Limit the amount of records returned
+    #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
+    pub limit: usize,
+}
+
+fn validate_limit(s: &str) -> Result<usize, String> {
+    let limit: usize = s.parse().map_err(|_| "Must be a number".to_string())?;
+    if limit > 65536 {
+        return Err("Limit cannot exceed 65536".to_string());
+    }
+    Ok(limit)
 }
 
 fn validate_timestr(s: &str) -> Result<String, String> {
@@ -111,7 +139,8 @@ fn parse_closing_code(s: &str) -> Result<u8, String> {
         "done" | "complete" | "completed" => Ok(1),
         "cancelled" | "canceled" | "cancel" => Ok(2),
         "duplicate" => Ok(3),
-        "removed" | "remove" => Ok(4),
+        "defer" | "suspend" | "shelve" => Ok(4),
+        "removed" | "remove" => Ok(5),
         _ => {
             s.parse::<u8>().map_err(|_| 
                 format!("Invalid closing code: '{}'. Expected 'completed', 'cancelled', 'duplicate' or a number from 0-255", s)

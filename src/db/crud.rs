@@ -204,11 +204,11 @@ mod tests {
         let item = get_test_item("task", "work", "meeting");
         let item_id = insert_item(&conn, &item).unwrap();
         let mut item_db = get_item(&conn, item_id).unwrap();
-        item_db.closing_code = Some(1);
+        item_db.closing_code = 1;
         let result = update_item(&conn, &item_db);
         assert!(result.is_ok(), "Cannot update item: {:?}", result.err());
         let updated_item = get_item(&conn, item_id).unwrap();
-        assert_eq!(updated_item.closing_code, Some(1))
+        assert_eq!(updated_item.closing_code, 1)
     }
 
     #[test]
@@ -255,5 +255,9 @@ mod tests {
 
         let empty_items = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
         assert_eq!(empty_items.len(), 0);
+
+        let limited_items =
+            query_items(&conn, &ItemQuery::new().with_action("task").with_limit(4)).unwrap();
+        assert_eq!(limited_items.len(), 4);
     }
 }
