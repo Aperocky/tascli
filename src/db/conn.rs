@@ -32,7 +32,7 @@ pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
             create_time INTEGER NOT NULL,
             target_time INTEGER,
             modify_time INTEGER,
-            closing_code INTEGER DEFAULT 0
+            status INTEGER DEFAULT 0
         )",
         [],
     )?;

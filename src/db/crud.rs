@@ -42,13 +42,13 @@ pub fn update_item(conn: &Connection, item: &Item) -> Result<(), rusqlite::Error
             content = ?1,
             target_time = ?2,
             modify_time = ?3,
-            closing_code = ?4
+            status = ?4
         WHERE id = ?5",
         params![
             item.content,
             item.target_time,
             now,
-            item.closing_code,
+            item.status,
             item.id
         ],
     )?;
@@ -104,8 +104,8 @@ pub fn query_items(
         params.push(tt_max.to_string());
     }
 
-    if let Some(cc) = item_query.closing_code {
-        conditions.push("closing_code = ?");
+    if let Some(cc) = item_query.status {
+        conditions.push("status = ?");
         params.push(cc.to_string());
     }
 
@@ -194,11 +194,11 @@ mod tests {
         let item = get_test_item("task", "work", "meeting");
         let item_id = insert_item(&conn, &item).unwrap();
         let mut item_db = get_item(&conn, item_id).unwrap();
-        item_db.closing_code = 1;
+        item_db.status = 1;
         let result = update_item(&conn, &item_db);
         assert!(result.is_ok(), "Cannot update item: {:?}", result.err());
         let updated_item = get_item(&conn, item_id).unwrap();
-        assert_eq!(updated_item.closing_code, 1)
+        assert_eq!(updated_item.status, 1)
     }
 
     #[test]

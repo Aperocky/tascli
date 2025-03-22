@@ -39,7 +39,7 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     };
 
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
-    item.closing_code = status;
+    item.status = status;
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
     display::debug_print_items("Completed item:", &[item]);
     Ok(())
@@ -84,7 +84,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
 
     // Update status/closing code if provided
     if let Some(status) = cmd.status {
-        item.closing_code = status;
+        item.status = status;
     }
 
     // Set modify time to current time
@@ -127,7 +127,7 @@ mod tests {
         handle_donecmd(&conn, &done_cmd).unwrap();
         let item_id = cache::read(&conn, 1).unwrap().unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
-        assert_eq!(updated_item.closing_code, 1);
+        assert_eq!(updated_item.status, 1);
 
         // update again
         let done_cmd = DoneCommand {
@@ -136,7 +136,7 @@ mod tests {
         };
         handle_donecmd(&conn, &done_cmd).unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
-        assert_eq!(updated_item.closing_code, 2);
+        assert_eq!(updated_item.status, 2);
     }
 
     #[test]
@@ -183,7 +183,7 @@ mod tests {
         };
         handle_updatecmd(&conn, &update_cmd).unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
-        assert_eq!(updated_item.closing_code, 3);
+        assert_eq!(updated_item.status, 3);
 
         // Test updating target_time
         let update_cmd = UpdateCommand {

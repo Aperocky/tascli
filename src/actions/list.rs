@@ -64,7 +64,10 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
     if let Some(cat) = &cmd.category {
         task_query = task_query.with_category(cat);
     }
-    task_query = task_query.with_closing_code(cmd.status);
+    // 255 status means we query all task items regardless of status.
+    if cmd.status != 255 {
+        task_query = task_query.with_status(cmd.status);
+    }
     task_query = task_query.with_limit(cmd.limit);
     query_items(conn, &task_query).map_err(|e| e.to_string())
 }

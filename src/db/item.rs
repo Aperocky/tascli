@@ -14,7 +14,7 @@ pub struct Item {
     pub create_time: i64,
     pub target_time: Option<i64>,
     pub modify_time: Option<i64>,
-    pub closing_code: u8,
+    pub status: u8,
 }
 
 impl Item {
@@ -32,7 +32,7 @@ impl Item {
             create_time: now,
             target_time: None,
             modify_time: None,
-            closing_code: 0,
+            status: 0,
         }
     }
 
@@ -68,7 +68,7 @@ impl Item {
             create_time: row.get("create_time")?,
             target_time: row.get("target_time")?,
             modify_time: row.get("modify_time")?,
-            closing_code: row.get("closing_code")?,
+            status: row.get("status")?,
         })
     }
 }
@@ -81,7 +81,7 @@ pub struct ItemQuery<'a> {
     pub create_time_max: Option<i64>,
     pub target_time_min: Option<i64>,
     pub target_time_max: Option<i64>,
-    pub closing_code: Option<u8>,
+    pub status: Option<u8>,
     pub limit: Option<usize>,
     pub offset_id: Option<i64>,
 }
@@ -95,7 +95,7 @@ impl<'a> ItemQuery<'a> {
             create_time_max: None,
             target_time_min: None,
             target_time_max: None,
-            closing_code: None,
+            status: None,
             limit: None,
             offset_id: None,
         }
@@ -143,8 +143,8 @@ impl<'a> ItemQuery<'a> {
         self
     }
 
-    pub fn with_closing_code(mut self, closing_code: u8) -> Self {
-        self.closing_code = Some(closing_code);
+    pub fn with_status(mut self, status: u8) -> Self {
+        self.status = Some(status);
         self
     }
 
@@ -177,7 +177,7 @@ mod tests {
         assert!(item.id.is_none());
         assert!(item.target_time.is_none());
         assert!(item.modify_time.is_none());
-        assert_eq!(item.closing_code, 0);
+        assert_eq!(item.status, 0);
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
         assert_eq!(query.create_time_max, None);
         assert_eq!(query.target_time_min, None);
         assert_eq!(query.target_time_max, None);
-        assert_eq!(query.closing_code, None);
+        assert_eq!(query.status, None);
         assert_eq!(query.limit, None);
         assert_eq!(query.offset_id, None);
 
@@ -240,8 +240,8 @@ mod tests {
         assert_eq!(query.target_time_min, Some(3000));
         assert_eq!(query.target_time_max, Some(4000));
 
-        let query = ItemQuery::new().with_closing_code(1);
-        assert_eq!(query.closing_code, Some(1));
+        let query = ItemQuery::new().with_status(1);
+        assert_eq!(query.status, Some(1));
 
         let query = ItemQuery::new().with_limit(100);
         assert_eq!(query.limit, Some(100));
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(query.create_time_max, None);
         assert_eq!(query.target_time_min, None);
         assert_eq!(query.target_time_max, None);
-        assert_eq!(query.closing_code, None);
+        assert_eq!(query.status, None);
         assert_eq!(query.limit, Some(100));
         assert_eq!(query.offset_id, None);
     }

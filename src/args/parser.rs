@@ -52,8 +52,8 @@ pub struct DoneCommand {
     /// Index from previous List command
     #[arg(value_parser = validate_index)]
     pub index: usize,
-    /// Closing code, [done|cancelled|remove], default to done.
-    #[arg(short, long, value_parser = parse_closing_code, default_value_t = 1)]
+    /// Status, [done|cancelled|remove], default to done.
+    #[arg(short, long, value_parser = parse_status, default_value_t = 1)]
     pub status: u8,
 }
 
@@ -72,7 +72,7 @@ pub struct UpdateCommand {
     #[arg(short, long)]
     pub add_content: Option<String>,
     /// Edit the status of the tasks
-    #[arg(short, long, value_parser = parse_closing_code)]
+    #[arg(short, long, value_parser = parse_status)]
     pub status: Option<u8>
 }
 
@@ -95,7 +95,8 @@ pub struct ListTaskCommand {
     #[arg(short, long)]
     pub days: Option<usize>,
     /// Status to list, default to ongoing tasks
-    #[arg(short, long, value_parser = parse_closing_code, default_value_t = 0)]
+    /// you can filter to [done|cancelled|duplicate] or "all"
+    #[arg(short, long, value_parser = parse_status, default_value_t = 0)]
     pub status: u8,
     /// Show overdue tasks - tasks that are scheduled to be completed in the past, but were not
     /// closed. It is assumed that they are already done by default.
@@ -146,7 +147,7 @@ fn validate_timestr(s: &str) -> Result<String, String> {
     }
 }
 
-fn parse_closing_code(s: &str) -> Result<u8, String> {
+fn parse_status(s: &str) -> Result<u8, String> {
     match s.to_lowercase().as_str() {
         "ongoing" => Ok(0), // This is default.
         "done" | "complete" | "completed" => Ok(1),
@@ -154,6 +155,7 @@ fn parse_closing_code(s: &str) -> Result<u8, String> {
         "duplicate" => Ok(3),
         "defer" | "suspend" | "shelve" => Ok(4),
         "removed" | "remove" => Ok(5),
+        "all" => Ok(255),
         _ => {
             s.parse::<u8>().map_err(|_| 
                 format!("Invalid closing code: '{}'. Expected 'completed', 'cancelled', 'duplicate' or a number from 0-255", s)
