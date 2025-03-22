@@ -50,6 +50,7 @@ pub struct RecordCommand {
 #[derive(Debug, Args)]
 pub struct DoneCommand {
     /// Index from previous List command
+    #[arg(value_parser = validate_index)]
     pub index: usize,
     /// Closing code, [done|cancelled|remove], default to done.
     #[arg(short, long, value_parser = parse_closing_code, default_value_t = 1)]
@@ -59,10 +60,11 @@ pub struct DoneCommand {
 #[derive(Debug, Args)]
 pub struct UpdateCommand {
     /// Index from previous List command
+    #[arg(value_parser = validate_index)]
     pub index: usize,
     /// Update target completion time.
     #[arg(short, long, value_parser = validate_timestr)]
-    pub target_time: Option<u8>,
+    pub target_time: Option<String>,
     /// Update all of content
     #[arg(short, long)]
     pub content: Option<String>,
@@ -124,6 +126,17 @@ fn validate_limit(s: &str) -> Result<usize, String> {
         return Err("Limit cannot exceed 65536".to_string());
     }
     Ok(limit)
+}
+
+fn validate_index(s: &str) -> Result<usize, String> {
+    let index: usize = s.parse().map_err(|_| "Index must be a number".to_string())?;
+    if index == 0 {
+        return Err("Index must be greater than 0".to_string());
+    }
+    if index > 65536 {
+        return Err("Index cannot exceed 65536".to_string());
+    }
+    Ok(index)
 }
 
 fn validate_timestr(s: &str) -> Result<String, String> {

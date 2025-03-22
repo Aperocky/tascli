@@ -2,9 +2,12 @@ use rusqlite::Connection;
 
 use crate::{
     actions::display,
-    args::parser::{
-        DoneCommand,
-        UpdateCommand,
+    args::{
+        parser::{
+            DoneCommand,
+            UpdateCommand,
+        },
+        timestr,
     },
     db::{
         cache,
@@ -16,9 +19,18 @@ use crate::{
 };
 
 pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String> {
+    match cache::validate_cache(conn) {
+        Ok(true) => {}
+        Ok(false) => {
+            return Err("Cache is not valid, considering running list command first".to_string());
+        }
+        Err(_) => {
+            return Err("Cannot connect to cache".to_string());
+        }
+    };
+
     let index = cmd.index as i64;
     let status = cmd.status;
-
     let row_id = match cache::read(conn, index)
         .map_err(|e| format!("Failed to read cache table: {:?}", e))?
     {
@@ -34,8 +46,17 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
 }
 
 pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), String> {
-    let index = cmd.index as i64;
+    match cache::validate_cache(conn) {
+        Ok(true) => {}
+        Ok(false) => {
+            return Err("Cache is not valid, considering running list command first".to_string());
+        }
+        Err(_) => {
+            return Err("Cannot connect to cache".to_string());
+        }
+    };
 
+    let index = cmd.index as i64;
     let row_id = match cache::read(conn, index)
         .map_err(|e| format!("Failed to read cache table: {:?}", e))?
     {
@@ -46,8 +67,9 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
 
     // Update target time if provided
-    if let Some(target) = cmd.target_time {
-        item.target_time = Some(target as i64);
+    if let Some(target) = &cmd.target_time {
+        let target_time = timestr::to_unix_epoch(target)?;
+        item.target_time = Some(target_time);
     }
 
     // Replace content if provided
@@ -162,5 +184,15 @@ mod tests {
         handle_updatecmd(&conn, &update_cmd).unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.closing_code, 3);
+
+        // Test updating target_time
+        let update_cmd = UpdateCommand {
+            index: 1,
+            target_time: Some("eow".to_string()),
+            content: None,
+            add_content: None,
+            status: Some(3),
+        };
+        handle_updatecmd(&conn, &update_cmd).unwrap();
     }
 }

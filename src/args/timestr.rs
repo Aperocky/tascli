@@ -223,7 +223,8 @@ mod tests {
     #[test]
     fn test_unix_epoch() {
         let btime = "2025-02-23 20:35:00";
-        let local_dt = Local.datetime_from_str(btime, "%Y-%m-%d %H:%M:%S").unwrap();
+        let naive_dt = NaiveDateTime::parse_from_str(btime, "%Y-%m-%d %H:%M:%S").unwrap();
+        let local_dt = naive_dt.and_local_timezone(Local).unwrap();
         let utc_dt = local_dt.with_timezone(&Utc);
         let expected_timestamp = utc_dt.timestamp();
 
