@@ -10,7 +10,7 @@ pub fn store(conn: &Connection, items: &[Item]) -> Result<()> {
     let kv: Vec<(i64, i64)> = items
         .iter()
         .enumerate()
-        .map(|(index, item)| (index as i64, item.id.unwrap()))
+        .map(|(index, item)| ((index + 1) as i64, item.id.unwrap()))
         .collect();
 
     store_kv(conn, kv)

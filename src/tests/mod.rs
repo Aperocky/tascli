@@ -32,7 +32,7 @@ pub fn insert_task(conn: &Connection, category: &str, content: &str, timestr: &s
 pub fn insert_record(conn: &Connection, category: &str, content: &str, timestr: &str) {
     let create_time = timestr::to_unix_epoch(timestr).unwrap();
     let new_record = Item::with_create_time(
-        "task".to_string(),
+        "record".to_string(),
         category.to_string(),
         content.to_string(),
         create_time,

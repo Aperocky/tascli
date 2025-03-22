@@ -53,7 +53,7 @@ pub struct DoneCommand {
     pub index: usize,
     /// Closing code, [done|cancelled|remove], default to done.
     #[arg(short, long, value_parser = parse_closing_code, default_value_t = 1)]
-    pub closing_code: u8,
+    pub status: u8,
 }
 
 #[derive(Debug, Args)]

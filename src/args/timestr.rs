@@ -70,9 +70,9 @@ pub fn parse_flexible_timestr(s: &str) -> Result<NaiveDateTime, String> {
 }
 
 fn parse_date_portion(s: &str, today: NaiveDate) -> Result<NaiveDate, String> {
-    // Try keywords first
     match s.to_lowercase().as_str() {
         "today" | "eod" => return Ok(today),
+        "yesterday" => return Ok(today - Duration::days(1)),
         "tomorrow" => return Ok(today + Duration::days(1)),
         "monday" => return Ok(next_weekday(today, Weekday::Mon)),
         "tuesday" => return Ok(next_weekday(today, Weekday::Tue)),
