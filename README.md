@@ -1,0 +1,115 @@
+# tascli
+
+A simple CLI tool for tracking tasks and records from terminal.
+
+## Basic Usage
+
+### Tasks
+
+Create tasks with deadlines:
+```bash
+# Basic tasks
+tascli task "Create readme" today
+tascli task "Publish package" tomorrow
+tascli task "Do taxes" 4/15
+
+# With category
+tascli task -c work "Read emails" week
+```
+
+List tasks:
+```bash
+# List active tasks
+$ tascli list task
+```
+output:
+```
+Task List:
+------------------------------------------------------------------------------------------------------------------
+| Index  | Category            | Content                                                   | Deadline            |
+------------------------------------------------------------------------------------------------------------------
+| 1      | default             | Create readme for tascli                                  | Today               |
+------------------------------------------------------------------------------------------------------------------
+| 2      | default             | Put tascli on crate.io                                    | Tomorrow            |
+------------------------------------------------------------------------------------------------------------------
+| 3      | default             | Do taxes                                                  | 4/15                |
+------------------------------------------------------------------------------------------------------------------
+| 4      | work                | Read work emails                                          | Tomorrow            |
+------------------------------------------------------------------------------------------------------------------
+```
+
+Complete tasks:
+```bash
+# Mark index 1 as done
+tascli done 1
+```
+
+List all tasks (including completed)
+```bash
+tascli list task --status all
+```
+output:
+```
+Task List:
+------------------------------------------------------------------------------------------------------------------
+| Index  | Category            | Content                                                   | Deadline            |
+------------------------------------------------------------------------------------------------------------------
+| 1      | default             | Create readme for tascli                                  | Today (completed)   |
+------------------------------------------------------------------------------------------------------------------
+| 2      | default             | Put tascli on crate.io                                    | Tomorrow            |
+------------------------------------------------------------------------------------------------------------------
+| 3      | default             | Do taxes                                                  | 4/15                |
+------------------------------------------------------------------------------------------------------------------
+| 4      | work                | Read work emails                                          | Tomorrow            |
+------------------------------------------------------------------------------------------------------------------
+```
+
+### Records
+
+Create records (for tracking events):
+```bash
+# With current time
+tascli record -c feeding "100ML"
+
+# With specific time
+tascli record -c feeding -t 6:10PM "100ML"
+```
+
+List records:
+```bash
+tascli list record
+```
+
+output:
+```
+Records List:
+------------------------------------------------------------------------------------------------------------------
+| Index  | Category            | Content                                                   | Created At          |
+------------------------------------------------------------------------------------------------------------------
+| 1      | feeding             | 100ML                                                     | Today 6:10PM        |
+------------------------------------------------------------------------------------------------------------------
+| 2      | feeding             | 90ML                                                      | Today 9:30PM        |
+------------------------------------------------------------------------------------------------------------------
+```
+
+## Command Reference
+
+```
+# Tasks
+tascli task <content> [timestr] [-c <category>]
+
+# Records
+tascli record <content> [-c <category>] [-t <time>]
+
+# Complete tasks
+tascli done <index> [-s <status>]
+
+# Update tasks or records
+tascli update <index> [--target-time <time>] [--content <text>] [--add-content <text>] [--status <status>]
+
+# List tasks
+tascli list task [timestr] [-c <category>] [-d <days>] [-s <status>] [-o] [-l <limit>]
+
+# List records
+tascli list record [-c <category>] [-d <days>] [-l <limit>]
+```
