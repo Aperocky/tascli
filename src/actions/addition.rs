@@ -27,7 +27,8 @@ pub fn handle_taskcmd(conn: &Connection, cmd: &TaskCommand) -> Result<(), String
     let new_task = Item::with_target_time("task".to_string(), category, content, Some(target_time));
     insert_item(conn, &new_task).map_err(|e| e.to_string())?;
 
-    display::debug_print_items("Inserted task: ", &[new_task]);
+    display::print_bold("Inserted task:");
+    display::print_items(&[new_task], false);
     Ok(())
 }
 
@@ -47,7 +48,8 @@ pub fn handle_recordcmd(conn: &Connection, cmd: &RecordCommand) -> Result<(), St
 
     insert_item(conn, &new_record).map_err(|e| e.to_string())?;
 
-    display::debug_print_items("Inserted task: ", &[new_record]);
+    display::print_bold("Inserted task:");
+    display::print_items(&[new_record], true);
     Ok(())
 }
 

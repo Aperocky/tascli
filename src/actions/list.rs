@@ -24,7 +24,8 @@ pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(
     let records = query_records(conn, &cmd)?;
     cache::clear(conn).map_err(|e| e.to_string())?;
     cache::store(conn, &records).map_err(|e| e.to_string())?;
-    display::debug_print_items("Records List:", &records);
+    display::print_bold("Records List:");
+    display::print_items(&records, true);
     Ok(())
 }
 
@@ -32,7 +33,9 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
     let tasks = query_tasks(conn, &cmd)?;
     cache::clear(conn).map_err(|e| e.to_string())?;
     cache::store(conn, &tasks).map_err(|e| e.to_string())?;
-    display::debug_print_items("Tasks List:", &tasks);
+
+    display::print_bold("Tasks List:");
+    display::print_items(&tasks, false);
     Ok(())
 }
 

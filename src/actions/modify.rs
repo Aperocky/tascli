@@ -39,9 +39,13 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     };
 
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
+    if item.action == "record" {
+        return Err("Cannot complete a record".to_string());
+    }
     item.status = status;
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
-    display::debug_print_items("Completed item:", &[item]);
+    display::print_bold("Completed Task:");
+    display::print_items(&[item], true);
     Ok(())
 }
 
@@ -91,7 +95,11 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     item.modify_time = Some(chrono::Utc::now().timestamp());
 
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
-    display::debug_print_items("Updated item:", &[item]);
+
+    let is_record = "record" == item.action;
+    let action = if is_record { "Record" } else { "Task" };
+    display::print_bold(&format!("Updated {}:", action));
+    display::print_items(&[item], is_record);
     Ok(())
 }
 

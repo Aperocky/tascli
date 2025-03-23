@@ -7,7 +7,8 @@ edition = "2024"
 clap = { version = "4.5.32", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1.11"
-rusqlite = "0.34.0"
+rusqlite = "0.34"
+textwrap = "0.16"
 
 [dev-dependencies]
 tempfile = "3.19.0"
