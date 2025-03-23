@@ -1,6 +1,6 @@
 # tascli
 
-A simple CLI tool for tracking tasks and records from terminal.
+A *simple* CLI tool for tracking tasks and records from terminal.
 
 ## Basic Usage
 
@@ -90,6 +90,39 @@ Records List:
 ------------------------------------------------------------------------------------------------------------------
 | 2      | feeding             | 90ML                                                      | Today 9:30PM        |
 ------------------------------------------------------------------------------------------------------------------
+```
+
+### Help
+
+`tascli` uses `clap` for argument parsing, use `--help` to get help on all levels of this cli:
+
+```
+aperocky@~$ tascli -h
+Usage: tascli <COMMAND>
+
+Commands:
+  task    add task with end time
+  record  add record
+  done    Finish task or remove records
+  update  Update tasks or records wording/deadlines
+  list    list tasks or records
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+aperocky@~$ tascli task -h
+add task with end time
+
+Usage: tascli task [OPTIONS] <CONTENT> [TIMESTR]
+
+Arguments:
+  <CONTENT>  Description of the task
+  [TIMESTR]  Time the task is due, default to EOD
+
+Options:
+  -c, --category <CATEGORY>  Category of the task
+  -h, --help                 Print help
 ```
 
 ## Command Reference
