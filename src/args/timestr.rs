@@ -81,6 +81,8 @@ fn parse_date_portion(s: &str, today: NaiveDate) -> Result<NaiveDate, String> {
         "friday" => return Ok(next_weekday(today, Weekday::Fri)),
         "saturday" => return Ok(next_weekday(today, Weekday::Sat)),
         "sunday" | "eow" | "week" => return Ok(next_weekday(today, Weekday::Sun)),
+        "year" | "eoy" => return Ok(today.with_month(12).unwrap().with_day(31).unwrap()),
+        "month" | "eom" => return Ok(last_day_of_month(today)),
         _ => {}
     }
 
@@ -139,6 +141,19 @@ fn parse_time_portion(s: &str) -> Result<NaiveTime, String> {
     }
 
     Err(format!("Couldn't parse '{}' as a time", s))
+}
+
+fn last_day_of_month(date: NaiveDate) -> NaiveDate {
+    let next_month = if date.month() == 12 {
+        date.with_year(date.year() + 1)
+            .unwrap()
+            .with_month(1)
+            .unwrap()
+    } else {
+        date.with_month(date.month() + 1).unwrap()
+    };
+    let first_of_next = next_month.with_day(1).unwrap();
+    first_of_next - Duration::days(1)
 }
 
 fn next_weekday(from_date: NaiveDate, weekday: Weekday) -> NaiveDate {
