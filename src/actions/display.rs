@@ -29,9 +29,9 @@ pub fn print_items(items: &[Item], is_record: bool) {
     let mut results: Vec<DisplayRow> = Vec::with_capacity(items.len());
     for (index, item) in items.iter().enumerate() {
         if is_record {
-            results.push(DisplayRow::from_record(index, item));
+            results.push(DisplayRow::from_record(index + 1, item));
         } else {
-            results.push(DisplayRow::from_task(index, item))
+            results.push(DisplayRow::from_task(index + 1, item))
         }
     }
     print_table(&results, is_record);
