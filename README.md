@@ -4,6 +4,8 @@ A *simple* CLI tool for tracking tasks and records from terminal.
 
 ## Basic Usage
 
+Tasks and records are stored in `~/.local/share/tascli/tascli.db` with `rusqlite`.
+
 ### Tasks
 
 Create tasks with deadlines:
@@ -123,26 +125,4 @@ Arguments:
 Options:
   -c, --category <CATEGORY>  Category of the task
   -h, --help                 Print help
-```
-
-## Command Reference
-
-```
-# Tasks
-tascli task <content> [timestr] [-c <category>]
-
-# Records
-tascli record <content> [-c <category>] [-t <time>]
-
-# Complete tasks
-tascli done <index> [-s <status>]
-
-# Update tasks or records
-tascli update <index> [--target-time <time>] [--content <text>] [--add-content <text>] [--status <status>]
-
-# List tasks
-tascli list task [timestr] [-c <category>] [-d <days>] [-s <status>] [-o] [-l <limit>]
-
-# List records
-tascli list record [-c <category>] [-d <days>] [-l <limit>]
 ```

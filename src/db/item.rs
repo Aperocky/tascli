@@ -86,6 +86,7 @@ pub struct ItemQuery<'a> {
     pub offset_id: Option<i64>,
 }
 
+#[allow(dead_code)]
 impl<'a> ItemQuery<'a> {
     pub fn new() -> Self {
         ItemQuery {
