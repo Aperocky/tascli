@@ -2,6 +2,13 @@
 
 A *simple* CLI tool for tracking tasks and records from terminal.
 
+Installation:
+
+```bash
+# force for upgrade
+cargo install tascli [--force]
+```
+
 ## Basic Usage
 
 Tasks and records are stored in `~/.local/share/tascli/tascli.db` with `rusqlite`.
