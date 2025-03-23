@@ -65,8 +65,11 @@ pub struct UpdateCommand {
     /// Update target completion time.
     #[arg(short, long, value_parser = validate_timestr)]
     pub target_time: Option<String>,
-    /// Update all of content
+    /// Update category of the task/record
     #[arg(short, long)]
+    pub category: Option<String>,
+    /// Update all of content
+    #[arg(short='w', long)]
     pub content: Option<String>,
     /// Add to content
     #[arg(short, long)]

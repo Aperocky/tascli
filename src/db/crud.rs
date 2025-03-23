@@ -39,12 +39,14 @@ pub fn update_item(conn: &Connection, item: &Item) -> Result<(), rusqlite::Error
 
     conn.execute(
         "UPDATE items SET 
-            content = ?1,
-            target_time = ?2,
-            modify_time = ?3,
-            status = ?4
-        WHERE id = ?5",
+            category = ?1,
+            content = ?2,
+            target_time = ?3,
+            modify_time = ?4,
+            status = ?5
+        WHERE id = ?6",
         params![
+            item.category,
             item.content,
             item.target_time,
             now,

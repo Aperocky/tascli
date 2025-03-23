@@ -70,29 +70,26 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
 
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
 
-    // Update target time if provided
     if let Some(target) = &cmd.target_time {
         let target_time = timestr::to_unix_epoch(target)?;
         item.target_time = Some(target_time);
     }
 
-    // Replace content if provided
+    if let Some(category) = &cmd.category {
+        item.category = category.clone();
+    }
+
     if let Some(content) = &cmd.content {
         item.content = content.clone();
     }
 
-    // Append to content if provided
     if let Some(add) = &cmd.add_content {
         item.content.push_str(add);
     }
 
-    // Update status/closing code if provided
     if let Some(status) = cmd.status {
         item.status = status;
     }
-
-    // Set modify time to current time
-    item.modify_time = Some(chrono::Utc::now().timestamp());
 
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
 
@@ -158,6 +155,7 @@ mod tests {
         let update_cmd = UpdateCommand {
             index: 1,
             target_time: None,
+            category: None,
             content: Some("reorganize garage thoroughly".to_string()),
             add_content: None,
             status: None,
@@ -170,6 +168,7 @@ mod tests {
         let update_cmd = UpdateCommand {
             index: 1,
             target_time: None,
+            category: None,
             content: None,
             add_content: Some(" and sort tools".to_string()),
             status: None,
@@ -185,6 +184,7 @@ mod tests {
         let update_cmd = UpdateCommand {
             index: 1,
             target_time: None,
+            category: None,
             content: None,
             add_content: None,
             status: Some(3),
@@ -193,14 +193,17 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 3);
 
-        // Test updating target_time
+        // Test updating target_time and category
         let update_cmd = UpdateCommand {
             index: 1,
             target_time: Some("eow".to_string()),
+            category: Some("chore".to_string()),
             content: None,
             add_content: None,
-            status: Some(3),
+            status: None,
         };
         handle_updatecmd(&conn, &update_cmd).unwrap();
+        let got_item = get_item(&conn, item_id).unwrap();
+        assert_eq!(got_item.category, "chore");
     }
 }
