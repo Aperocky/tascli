@@ -483,13 +483,14 @@ dependencies = [
 
 [[package]]
 name = "tascli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "clap",
  "regex",
  "rusqlite",
  "tempfile",
+ "terminal_size",
  "textwrap",
 ]
 
@@ -502,6 +503,16 @@ dependencies = [
  "fastrand",
  "getrandom",
  "once_cell",
+ "rustix",
+ "windows-sys",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45c6481c4829e4cc63825e62c49186a34538b7b2750b73b266581ffb612fb5ed"
+dependencies = [
  "rustix",
  "windows-sys",
 ]

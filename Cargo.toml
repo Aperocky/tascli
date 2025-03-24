@@ -1,6 +1,6 @@
 [package]
 name = "tascli"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "A simple CLI tool for tracking tasks and records from terminal"
 license = "MIT"
@@ -16,6 +16,7 @@ chrono = { version = "0.4", features = ["serde"] }
 regex = "1.11"
 rusqlite = "0.34"
 textwrap = "0.16"
+terminal_size = "0.4"
 
 [dev-dependencies]
 tempfile = "3.19.0"

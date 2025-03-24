@@ -1,7 +1,4 @@
-use std::{
-    cmp,
-    env,
-};
+use std::cmp;
 
 use chrono::{
     Datelike,
@@ -9,6 +6,10 @@ use chrono::{
     TimeZone,
     Timelike,
     Weekday,
+};
+use terminal_size::{
+    terminal_size,
+    Width,
 };
 use textwrap::{
     wrap,
@@ -48,10 +49,10 @@ pub fn print_bold(text: &str) {
 }
 
 fn print_table(rows: &[DisplayRow], is_record: bool) {
-    // Get terminal width from environment variable
-    let terminal_width = match env::var("COLUMNS") {
-        Ok(columns) => columns.parse::<usize>().unwrap_or(120),
-        Err(_) => 120, // Default to 120 if COLUMNS is not set
+    let terminal_width = if let Some((Width(w), _)) = terminal_size() {
+        w as usize
+    } else {
+        120 // Default if unable to detect
     };
 
     // Define column widths
