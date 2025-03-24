@@ -37,7 +37,7 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     item.status = status;
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
     display::print_bold("Completed Task:");
-    display::print_items(&[item], true);
+    display::print_items(&[item], true, false);
     Ok(())
 }
 
@@ -46,7 +46,7 @@ pub fn handle_deletecmd(conn: &Connection, cmd: &DeleteCommand) -> Result<(), St
     let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let item = get_item(conn, row_id).map_err(|e| format!("Failed to find item: {:?}", e))?;
     let item_type = item.action.clone();
-    display::print_items(&[item], item_type == "record");
+    display::print_items(&[item], item_type == "record", false);
     let accept = prompt_yes_no(&format!(
         "Are you sure you want to delete this {}? ",
         &item_type
@@ -91,7 +91,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     let is_record = "record" == item.action;
     let action = if is_record { "Record" } else { "Task" };
     display::print_bold(&format!("Updated {}:", action));
-    display::print_items(&[item], is_record);
+    display::print_items(&[item], is_record, false);
     Ok(())
 }
 

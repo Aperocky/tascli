@@ -26,13 +26,18 @@ pub fn debug_print_items(header: &str, items: &[Item]) {
     }
 }
 
-pub fn print_items(items: &[Item], is_record: bool) {
+pub fn print_items(items: &[Item], is_record: bool, is_list: bool) {
     let mut results: Vec<DisplayRow> = Vec::with_capacity(items.len());
     for (index, item) in items.iter().enumerate() {
-        if is_record {
-            results.push(DisplayRow::from_record(index + 1, item));
+        let indexstr = if is_list {
+            format!("{}", index + 1)
         } else {
-            results.push(DisplayRow::from_task(index + 1, item))
+            "N/A".to_string()
+        };
+        if is_record {
+            results.push(DisplayRow::from_record(indexstr, item));
+        } else {
+            results.push(DisplayRow::from_task(indexstr, item))
         }
     }
     print_table(&results, is_record);
@@ -254,7 +259,7 @@ pub struct DisplayRow {
 }
 
 impl DisplayRow {
-    pub fn from_task(index: usize, task: &Item) -> Self {
+    pub fn from_task(index: String, task: &Item) -> Self {
         let mut target_timestr = timestamp_to_display_string(task.target_time.unwrap(), false);
         let category = task.category.clone();
         let content = task.content.clone();
@@ -263,19 +268,19 @@ impl DisplayRow {
             target_timestr.push_str(&format!(" ({})", status_str));
         }
         DisplayRow {
-            index: format!("{}", index),
+            index,
             category,
             content,
             timestr: target_timestr,
         }
     }
 
-    pub fn from_record(index: usize, record: &Item) -> Self {
+    pub fn from_record(index: String, record: &Item) -> Self {
         let create_timestr = timestamp_to_display_string(record.create_time, true);
         let category = record.category.clone();
         let content = record.content.clone();
         DisplayRow {
-            index: format!("{}", index),
+            index,
             category,
             content,
             timestr: create_timestr,

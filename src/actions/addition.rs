@@ -28,7 +28,7 @@ pub fn handle_taskcmd(conn: &Connection, cmd: &TaskCommand) -> Result<(), String
     insert_item(conn, &new_task).map_err(|e| e.to_string())?;
 
     display::print_bold("Inserted task:");
-    display::print_items(&[new_task], false);
+    display::print_items(&[new_task], false, false);
     Ok(())
 }
 
@@ -49,7 +49,7 @@ pub fn handle_recordcmd(conn: &Connection, cmd: &RecordCommand) -> Result<(), St
     insert_item(conn, &new_record).map_err(|e| e.to_string())?;
 
     display::print_bold("Inserted task:");
-    display::print_items(&[new_record], true);
+    display::print_items(&[new_record], true, false);
     Ok(())
 }
 
