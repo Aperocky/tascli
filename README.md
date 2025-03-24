@@ -5,9 +5,10 @@ A *simple* CLI tool for tracking tasks and records from terminal.
 Installation:
 
 ```bash
-# force for upgrade
-cargo install tascli [--force]
+cargo install tascli
 ```
+
+![tascli demo](tascli.gif)
 
 ## Basic Usage
 
