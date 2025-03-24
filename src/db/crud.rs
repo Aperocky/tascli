@@ -31,7 +31,7 @@ pub fn insert_item(conn: &Connection, item: &Item) -> Result<i64> {
     Ok(conn.last_insert_rowid())
 }
 
-pub fn update_item(conn: &Connection, item: &Item) -> Result<(), rusqlite::Error> {
+pub fn update_item(conn: &Connection, item: &Item) -> Result<()> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -58,7 +58,7 @@ pub fn update_item(conn: &Connection, item: &Item) -> Result<(), rusqlite::Error
     Ok(())
 }
 
-pub fn get_item(conn: &Connection, item_id: i64) -> Result<Item, rusqlite::Error> {
+pub fn get_item(conn: &Connection, item_id: i64) -> Result<Item> {
     let item = conn.query_row(
         "SELECT * FROM items WHERE id = ?1",
         params![item_id],
@@ -66,6 +66,12 @@ pub fn get_item(conn: &Connection, item_id: i64) -> Result<Item, rusqlite::Error
     )?;
 
     Ok(item)
+}
+
+pub fn delete_item(conn: &Connection, item_id: i64) -> Result<()> {
+    conn.execute("DELETE FROM items WHERE id = ?1", params![item_id])?;
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -201,6 +207,24 @@ mod tests {
         assert!(result.is_ok(), "Cannot update item: {:?}", result.err());
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 1)
+    }
+
+    #[test]
+    fn test_delete_item() {
+        let (conn, _temp_file) = get_test_conn();
+        let item1 = get_test_item("task", "work", "meeting 1");
+        let item1_id = insert_item(&conn, &item1).unwrap();
+        let item2 = get_test_item("task", "work", "meeting 2");
+        let item2_id = insert_item(&conn, &item2).unwrap();
+        let item_query = ItemQuery::new().with_action("task");
+        let items = query_items(&conn, &item_query).unwrap();
+        assert_eq!(items.len(), 2);
+        delete_item(&conn, item2_id).expect("Unable to delete item");
+        let items = query_items(&conn, &item_query).unwrap();
+        assert_eq!(items.len(), 1);
+        delete_item(&conn, item1_id).expect("Unable to delete item");
+        let items = query_items(&conn, &item_query).unwrap();
+        assert_eq!(items.len(), 0);
     }
 
     #[test]

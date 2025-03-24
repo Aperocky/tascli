@@ -1,9 +1,15 @@
+use std::{
+    io,
+    io::Write,
+};
+
 use rusqlite::Connection;
 
 use crate::{
     actions::display,
     args::{
         parser::{
+            DeleteCommand,
             DoneCommand,
             UpdateCommand,
         },
@@ -12,6 +18,7 @@ use crate::{
     db::{
         cache,
         crud::{
+            delete_item,
             get_item,
             update_item,
         },
@@ -19,24 +26,9 @@ use crate::{
 };
 
 pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String> {
-    match cache::validate_cache(conn) {
-        Ok(true) => {}
-        Ok(false) => {
-            return Err("Cache is not valid, considering running list command first".to_string());
-        }
-        Err(_) => {
-            return Err("Cannot connect to cache".to_string());
-        }
-    };
-
-    let index = cmd.index as i64;
+    validate_cache(conn)?;
+    let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let status = cmd.status;
-    let row_id = match cache::read(conn, index)
-        .map_err(|e| format!("Failed to read cache table: {:?}", e))?
-    {
-        Some(id) => id,
-        None => return Err(format!("index {} does not exist", index)),
-    };
 
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
     if item.action == "record" {
@@ -49,25 +41,28 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     Ok(())
 }
 
+pub fn handle_deletecmd(conn: &Connection, cmd: &DeleteCommand) -> Result<(), String> {
+    validate_cache(conn)?;
+    let row_id = get_rowid_from_cache(conn, cmd.index)?;
+    let item = get_item(conn, row_id).map_err(|e| format!("Failed to find item: {:?}", e))?;
+    let item_type = item.action.clone();
+    display::print_items(&[item], item_type == "record");
+    let accept = prompt_yes_no(&format!(
+        "Are you sure you want to delete this {}? ",
+        &item_type
+    ));
+
+    if !accept {
+        return Err(format!("Not deleting the {}", &item_type));
+    }
+    delete_item(conn, row_id).map_err(|e| format!("Failed to update item: {:?}", e))?;
+    display::print_bold("Deletion success");
+    Ok(())
+}
+
 pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), String> {
-    match cache::validate_cache(conn) {
-        Ok(true) => {}
-        Ok(false) => {
-            return Err("Cache is not valid, considering running list command first".to_string());
-        }
-        Err(_) => {
-            return Err("Cannot connect to cache".to_string());
-        }
-    };
-
-    let index = cmd.index as i64;
-    let row_id = match cache::read(conn, index)
-        .map_err(|e| format!("Failed to read cache table: {:?}", e))?
-    {
-        Some(id) => id,
-        None => return Err(format!("index {} does not exist", index)),
-    };
-
+    validate_cache(conn)?;
+    let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
 
     if let Some(target) = &cmd.target_time {
@@ -98,6 +93,32 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     display::print_bold(&format!("Updated {}:", action));
     display::print_items(&[item], is_record);
     Ok(())
+}
+
+fn validate_cache(conn: &Connection) -> Result<(), String> {
+    match cache::validate_cache(conn) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err("Cache is not valid, considering running list command first".to_string()),
+        Err(_) => Err("Cannot connect to cache".to_string()),
+    }
+}
+
+fn get_rowid_from_cache(conn: &Connection, index: usize) -> Result<i64, String> {
+    let index = index as i64;
+    match cache::read(conn, index).map_err(|e| format!("Failed to read cache table: {:?}", e))? {
+        Some(id) => Ok(id),
+        None => Err(format!("index {} does not exist", index)),
+    }
+}
+
+fn prompt_yes_no(question: &str) -> bool {
+    print!("{} (y/n): ", question);
+    io::stdout().flush().unwrap();
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+
+    matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
 #[cfg(test)]

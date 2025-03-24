@@ -10,7 +10,7 @@ fn main() {
     let conn = db::conn::connect().unwrap();
     let result = actions::handler::handle_commands(&conn, cli_args);
     if result.is_err() {
-        println!("Error executing tascli: {:?}", result.unwrap_err());
+        println!("tascli error: {:?}", result.unwrap_err());
     }
 }
 

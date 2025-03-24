@@ -25,7 +25,7 @@ fn get_db_path() -> PathBuf {
 pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS items (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             action TEXT NOT NULL,
             category TEXT NOT NULL,
             content TEXT NOT NULL,

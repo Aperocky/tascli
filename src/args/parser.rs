@@ -14,10 +14,12 @@ pub enum Action {
     Task(TaskCommand),
     /// add record
     Record(RecordCommand),
-    /// Finish task or remove records
+    /// Finish tasks
     Done(DoneCommand),
     /// Update tasks or records wording/deadlines
     Update(UpdateCommand),
+    /// Delete Records or Tasks
+    Delete(DeleteCommand),
     /// list tasks or records
     #[command(subcommand)]
     List(ListCommand),
@@ -57,6 +59,13 @@ pub struct DoneCommand {
     /// Status, [done|cancelled|remove], default to done.
     #[arg(short, long, value_parser = parse_status, default_value_t = 1)]
     pub status: u8,
+}
+
+#[derive(Debug, Args)]
+pub struct DeleteCommand {
+    /// Index from previous List command
+    #[arg(value_parser = validate_index)]
+    pub index: usize,
 }
 
 #[derive(Debug, Args)]
@@ -129,6 +138,9 @@ pub struct ListRecordCommand {
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
     if s == "list" {
         return Err(format!("Do you mean 'list {}' instead of '{} list'", cmd, cmd));
+    }
+    if s == "help" {
+        return Err("Do you mean --help instead of help".to_string());
     }
     Ok(s.to_string())
 }
