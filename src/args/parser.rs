@@ -26,6 +26,7 @@ pub enum Action {
 #[derive(Debug, Args)]
 pub struct TaskCommand {
     /// Description of the task
+    #[arg(value_parser = |s: &str| syntax_helper("task", s))]
     pub content: String,
     /// Time the task is due, default to EOD
     #[arg(value_parser = validate_timestr)]
@@ -38,6 +39,7 @@ pub struct TaskCommand {
 #[derive(Debug, Args)]
 pub struct RecordCommand {
     /// Content of the record
+    #[arg(value_parser = |s: &str| syntax_helper("record", s))]
     pub content: String,
     /// Category of the record
     #[arg(short, long)]
@@ -122,6 +124,13 @@ pub struct ListRecordCommand {
     /// Limit the amount of records returned
     #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
     pub limit: usize,
+}
+
+fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
+    if s == "list" {
+        return Err(format!("Do you mean 'list {}' instead of '{} list'", cmd, cmd));
+    }
+    Ok(s.to_string())
 }
 
 fn validate_limit(s: &str) -> Result<usize, String> {
