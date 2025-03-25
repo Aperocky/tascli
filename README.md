@@ -149,8 +149,9 @@ Usage: tascli <COMMAND>
 Commands:
   task    add task with end time
   record  add record
-  done    Finish task or remove records
+  done    Finish tasks
   update  Update tasks or records wording/deadlines
+  delete  Delete Records or Tasks
   list    list tasks or records
   help    Print this message or the help of the given subcommand(s)
 
