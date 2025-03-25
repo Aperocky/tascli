@@ -13,6 +13,7 @@ pub struct Item {
     pub content: String,
     pub create_time: i64,
     pub target_time: Option<i64>,
+    #[allow(dead_code)]
     pub modify_time: Option<i64>,
     pub status: u8,
 }

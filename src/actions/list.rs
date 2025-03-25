@@ -20,17 +20,25 @@ use crate::{
     },
 };
 
+const CREATE_TIME_COL: &str = "create_time";
+const TARGET_TIME_COL: &str = "target_time";
+
 pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(), String> {
-    let records = query_records(conn, &cmd)?;
+    let mut records = query_records(conn, &cmd)?;
+    order_items(&mut records, CREATE_TIME_COL)?;
+
     cache::clear(conn).map_err(|e| e.to_string())?;
     cache::store(conn, &records).map_err(|e| e.to_string())?;
+
     display::print_bold("Records List:");
     display::print_items(&records, true, true);
     Ok(())
 }
 
 pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), String> {
-    let tasks = query_tasks(conn, &cmd)?;
+    let mut tasks = query_tasks(conn, &cmd)?;
+    order_items(&mut tasks, TARGET_TIME_COL)?;
+
     cache::clear(conn).map_err(|e| e.to_string())?;
     cache::store(conn, &tasks).map_err(|e| e.to_string())?;
 
@@ -75,6 +83,26 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
     query_items(conn, &task_query).map_err(|e| e.to_string())
 }
 
+fn order_items(items: &mut [Item], by: &str) -> Result<(), String> {
+    match by {
+        CREATE_TIME_COL => {
+            items.sort_by_key(|item| item.create_time);
+            Ok(())
+        }
+        TARGET_TIME_COL => {
+            // Check all items have target_time before sorting
+            for item in items.iter() {
+                if item.target_time.is_none() {
+                    return Err("Task missing target_time, something went wrong".to_string());
+                }
+            }
+            items.sort_by_key(|item| item.target_time.unwrap());
+            Ok(())
+        }
+        _ => Err(format!("Cannot order by '{}'", by)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,6 +133,68 @@ mod tests {
         assert_eq!(results.len(), 3);
         let results = query_records(&conn, &list_all).unwrap();
         assert_eq!(results.len(), 4);
+    }
+
+    #[test]
+    fn test_order_by_create_time() {
+        let mut items = vec![
+            Item::with_create_time(
+                "task".to_string(),
+                "test".to_string(),
+                "content1".to_string(),
+                300,
+            ),
+            Item::with_create_time(
+                "task".to_string(),
+                "test".to_string(),
+                "content2".to_string(),
+                100,
+            ),
+            Item::with_create_time(
+                "task".to_string(),
+                "test".to_string(),
+                "content3".to_string(),
+                200,
+            ),
+        ];
+
+        let result = order_items(&mut items, CREATE_TIME_COL);
+        assert!(result.is_ok());
+
+        assert_eq!(items[0].content, "content2");
+        assert_eq!(items[1].content, "content3");
+        assert_eq!(items[2].content, "content1");
+    }
+
+    #[test]
+    fn test_order_by_target_time() {
+        let mut items = vec![
+            Item::with_target_time(
+                "record".to_string(),
+                "test".to_string(),
+                "content1".to_string(),
+                Some(300),
+            ),
+            Item::with_target_time(
+                "record".to_string(),
+                "test".to_string(),
+                "content2".to_string(),
+                Some(100),
+            ),
+            Item::with_target_time(
+                "record".to_string(),
+                "test".to_string(),
+                "content3".to_string(),
+                Some(200),
+            ),
+        ];
+
+        let result = order_items(&mut items, TARGET_TIME_COL);
+        assert!(result.is_ok());
+
+        assert_eq!(items[0].content, "content2");
+        assert_eq!(items[1].content, "content3");
+        assert_eq!(items[2].content, "content1");
     }
 
     #[test]
