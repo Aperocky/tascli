@@ -37,7 +37,7 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     item.status = status;
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
     display::print_bold("Completed Task:");
-    display::print_items(&[item], true, false);
+    display::print_items(&[item], false, false);
     Ok(())
 }
 
