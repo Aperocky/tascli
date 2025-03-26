@@ -79,6 +79,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     }
 
     if let Some(add) = &cmd.add_content {
+        item.content.push('\n');
         item.content.push_str(add);
     }
 
@@ -191,14 +192,14 @@ mod tests {
             target_time: None,
             category: None,
             content: None,
-            add_content: Some(" and sort tools".to_string()),
+            add_content: Some("move stuff to basement".to_string()),
             status: None,
         };
         handle_updatecmd(&conn, &update_cmd).unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(
             updated_item.content,
-            "reorganize garage thoroughly and sort tools"
+            "reorganize garage thoroughly\nmove stuff to basement"
         );
 
         // Test updating status
