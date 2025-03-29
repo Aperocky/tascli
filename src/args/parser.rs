@@ -1,4 +1,8 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{
+    Args,
+    Parser,
+    Subcommand,
+};
 use crate::args::timestr::parse_flexible_timestr;
 
 #[derive(Debug, Parser)]
@@ -86,6 +90,7 @@ pub struct UpdateCommand {
     #[arg(short, long)]
     pub add_content: Option<String>,
     /// Edit the status of the tasks
+    /// accept ongoing|done|cancelled|duplicate|pending
     #[arg(short, long, value_parser = parse_status)]
     pub status: Option<u8>
 }
@@ -106,14 +111,14 @@ pub struct ListTaskCommand {
     #[arg(short, long)]
     pub category: Option<String>,
     /// days in the future for tasks to list - mutually exclusive with timestr
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with = "timestr")]
     pub days: Option<usize>,
-    /// Status to list, default to ongoing tasks
+    /// Status to list, default to "ongoing"
     /// you can filter to [done|cancelled|duplicate] or "all"
     #[arg(short, long, value_parser = parse_status, default_value_t = 0)]
     pub status: u8,
-    /// Show overdue tasks - tasks that are scheduled to be completed in the past, but were not
-    /// closed. It is assumed that they are already done by default.
+    /// Show overdue tasks - tasks that are scheduled to be completed in the past
+    /// but were not closed, these tasks are not returned by default
     #[arg(short, long, default_value_t = false)]
     pub overdue: bool,
     /// Limit the amount of tasks returned
@@ -128,11 +133,19 @@ pub struct ListRecordCommand {
     pub category: Option<String>,
     /// days of records to retrieve - e.g. 1 shows record made in the last 24 hours.
     /// value of 7 would show record made in the past week.
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with_all = ["starting_date", "ending_date"])]
     pub days: Option<usize>,
     /// Limit the amount of records returned
     #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
     pub limit: usize,
+    /// List the record starting from this time
+    /// If this is date only, then it is non-inclusive
+    #[arg(short, long, value_parser = validate_timestr, conflicts_with = "days")]
+    pub starting_time: Option<String>,
+    /// List the record ending at this time
+    /// If this is date only, then it is inclusive
+    #[arg(short, long, value_parser = validate_timestr, conflicts_with = "days")]
+    pub ending_time: Option<String>,
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
@@ -179,6 +192,7 @@ fn parse_status(s: &str) -> Result<u8, String> {
         "duplicate" => Ok(3),
         "defer" | "suspend" | "shelve" => Ok(4),
         "removed" | "remove" => Ok(5),
+        "pending" => Ok(6),
         "all" => Ok(255),
         _ => {
             s.parse::<u8>().map_err(|_| 

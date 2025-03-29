@@ -56,6 +56,14 @@ fn query_records(conn: &Connection, cmd: &ListRecordCommand) -> Result<Vec<Item>
         let cutoff_timestamp = timestr::days_before_to_unix_epoch(days);
         record_query = record_query.with_create_time_min(cutoff_timestamp);
     }
+    if let Some(starting_time) = &cmd.starting_time {
+        let starting_timestamp = timestr::to_unix_epoch(starting_time)?;
+        record_query = record_query.with_create_time_min(starting_timestamp);
+    }
+    if let Some(ending_time) = &cmd.ending_time {
+        let ending_timestamp = timestr::to_unix_epoch(ending_time)?;
+        record_query = record_query.with_create_time_max(ending_timestamp);
+    }
     record_query = record_query.with_limit(cmd.limit);
     query_items(conn, &record_query).map_err(|e| e.to_string())
 }
@@ -123,16 +131,39 @@ mod tests {
             category: Some("feeding".to_string()),
             days: None,
             limit: 100,
+            starting_time: None,
+            ending_time: None,
         };
         let list_all = ListRecordCommand {
             category: None,
             days: Some(2),
             limit: 100,
+            starting_time: None,
+            ending_time: None,
+        };
+        let list_timeframe = ListRecordCommand {
+            category: None,
+            days: None,
+            limit: 100,
+            starting_time: Some("yesterday 4PM".to_string()),
+            ending_time: Some("yesterday 8PM".to_string()),
+        };
+        let list_timeframe_start_only = ListRecordCommand {
+            category: None,
+            days: None,
+            limit: 100,
+            starting_time: Some("yesterday 8PM".to_string()),
+            ending_time: None,
         };
         let results = query_records(&conn, &listfeeding).unwrap();
         assert_eq!(results.len(), 3);
         let results = query_records(&conn, &list_all).unwrap();
         assert_eq!(results.len(), 4);
+        let results = query_records(&conn, &list_timeframe).unwrap();
+        assert_eq!(results.len(), 2);
+        let results = query_records(&conn, &list_timeframe_start_only).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, "feeding")
     }
 
     #[test]
