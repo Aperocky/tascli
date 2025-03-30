@@ -94,7 +94,7 @@ mod tests {
             &ItemQuery::new()
                 .with_action("task")
                 .with_category("fun")
-                .with_status(0),
+                .with_statuses(vec![0]),
         )
         .unwrap();
         let expected_target_time = timestr::to_unix_epoch("tomorrow").unwrap();

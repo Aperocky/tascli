@@ -248,6 +248,7 @@ fn translate_status(status: u8) -> String {
         3 => "duplicate".to_string(),
         4 => "suspended".to_string(),
         5 => "removed".to_string(),
+        6 => "pending".to_string(),
         _ => "unknown".to_string(),
     }
 }

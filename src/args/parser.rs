@@ -90,7 +90,7 @@ pub struct UpdateCommand {
     #[arg(short, long)]
     pub add_content: Option<String>,
     /// Edit the status of the tasks
-    /// accept ongoing|done|cancelled|duplicate|pending
+    /// accept ongoing|done|cancelled|duplicate|suspended|pending
     #[arg(short, long, value_parser = parse_status)]
     pub status: Option<u8>
 }
@@ -113,9 +113,10 @@ pub struct ListTaskCommand {
     /// days in the future for tasks to list - mutually exclusive with timestr
     #[arg(short, long, conflicts_with = "timestr")]
     pub days: Option<usize>,
-    /// Status to list, default to "ongoing"
-    /// you can filter to [done|cancelled|duplicate] or "all"
-    #[arg(short, long, value_parser = parse_status, default_value_t = 0)]
+    /// Status to list, default to "open"
+    /// you can filter individually to ongoing|done|cancelled|duplicate|suspended|pending
+    /// or aggregate status like open|closed|all
+    #[arg(short, long, value_parser = parse_status, default_value_t = 254)]
     pub status: u8,
     /// Show overdue tasks - tasks that are scheduled to be completed in the past
     /// but were not closed, these tasks are not returned by default
@@ -190,10 +191,12 @@ fn parse_status(s: &str) -> Result<u8, String> {
         "done" | "complete" | "completed" => Ok(1),
         "cancelled" | "canceled" | "cancel" => Ok(2),
         "duplicate" => Ok(3),
-        "defer" | "suspend" | "shelve" => Ok(4),
+        "deferred" | "suspended" | "shelved" => Ok(4),
         "removed" | "remove" => Ok(5),
         "pending" => Ok(6),
-        "all" => Ok(255),
+        "closed" => Ok(253), // combination of done | cancelled | duplicate | removed
+        "open" => Ok(254), // combination of ongoing | pending | suspended
+        "all" => Ok(255), // all status
         _ => {
             s.parse::<u8>().map_err(|_| 
                 format!("Invalid closing code: '{}'. Expected 'completed', 'cancelled', 'duplicate' or a number from 0-255", s)

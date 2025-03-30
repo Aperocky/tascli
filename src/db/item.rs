@@ -82,7 +82,7 @@ pub struct ItemQuery<'a> {
     pub create_time_max: Option<i64>,
     pub target_time_min: Option<i64>,
     pub target_time_max: Option<i64>,
-    pub status: Option<u8>,
+    pub statuses: Option<Vec<u8>>,
     pub limit: Option<usize>,
     pub offset_id: Option<i64>,
 }
@@ -97,7 +97,7 @@ impl<'a> ItemQuery<'a> {
             create_time_max: None,
             target_time_min: None,
             target_time_max: None,
-            status: None,
+            statuses: None,
             limit: None,
             offset_id: None,
         }
@@ -145,8 +145,8 @@ impl<'a> ItemQuery<'a> {
         self
     }
 
-    pub fn with_status(mut self, status: u8) -> Self {
-        self.status = Some(status);
+    pub fn with_statuses(mut self, statuses: Vec<u8>) -> Self {
+        self.statuses = Some(statuses);
         self
     }
 
@@ -227,7 +227,7 @@ mod tests {
         assert_eq!(query.create_time_max, None);
         assert_eq!(query.target_time_min, None);
         assert_eq!(query.target_time_max, None);
-        assert_eq!(query.status, None);
+        assert_eq!(query.statuses, None);
         assert_eq!(query.limit, None);
         assert_eq!(query.offset_id, None);
 
@@ -242,8 +242,8 @@ mod tests {
         assert_eq!(query.target_time_min, Some(3000));
         assert_eq!(query.target_time_max, Some(4000));
 
-        let query = ItemQuery::new().with_status(1);
-        assert_eq!(query.status, Some(1));
+        let query = ItemQuery::new().with_statuses(vec![0]);
+        assert_eq!(query.statuses, Some(vec![0]));
 
         let query = ItemQuery::new().with_limit(100);
         assert_eq!(query.limit, Some(100));
@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(query.create_time_max, None);
         assert_eq!(query.target_time_min, None);
         assert_eq!(query.target_time_max, None);
-        assert_eq!(query.status, None);
+        assert_eq!(query.statuses, None);
         assert_eq!(query.limit, Some(100));
         assert_eq!(query.offset_id, None);
     }

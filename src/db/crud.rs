@@ -79,42 +79,46 @@ pub fn query_items(
     conn: &Connection,
     item_query: &ItemQuery,
 ) -> Result<Vec<Item>, rusqlite::Error> {
-    let mut conditions = Vec::new();
-    let mut params = Vec::new();
+    let mut conditions: Vec<String> = Vec::new();
+    let mut params: Vec<String> = Vec::new();
 
     if let Some(a) = item_query.action {
-        conditions.push("action = ?");
+        conditions.push("action = ?".to_string());
         params.push(a.to_string());
     }
 
     if let Some(c) = item_query.category {
-        conditions.push("category = ?");
+        conditions.push("category = ?".to_string());
         params.push(c.to_string());
     }
 
     if let Some(ct_min) = item_query.create_time_min {
-        conditions.push("create_time >= ?");
+        conditions.push("create_time >= ?".to_string());
         params.push(ct_min.to_string());
     }
 
     if let Some(ct_max) = item_query.create_time_max {
-        conditions.push("create_time <= ?");
+        conditions.push("create_time <= ?".to_string());
         params.push(ct_max.to_string());
     }
 
     if let Some(tt_min) = item_query.target_time_min {
-        conditions.push("target_time >= ?");
+        conditions.push("target_time >= ?".to_string());
         params.push(tt_min.to_string());
     }
 
     if let Some(tt_max) = item_query.target_time_max {
-        conditions.push("target_time <= ?");
+        conditions.push("target_time <= ?".to_string());
         params.push(tt_max.to_string());
     }
 
-    if let Some(cc) = item_query.status {
-        conditions.push("status = ?");
-        params.push(cc.to_string());
+    if let Some(cc) = &item_query.statuses {
+        let status_list = cc
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+            .join(", ");
+        conditions.push(format!("status IN ({})", status_list));
     }
 
     let mut querystr = String::from("SELECT * FROM items");
@@ -156,7 +160,11 @@ mod tests {
     use super::*;
     use crate::{
         db::item::Item,
-        tests::get_test_conn,
+        tests::{
+            get_test_conn,
+            insert_task,
+            update_status,
+        },
     };
 
     fn get_test_item(action: &str, category: &str, content: &str) -> Item {
@@ -231,12 +239,10 @@ mod tests {
     fn test_query_items() {
         let (conn, _temp_file) = get_test_conn();
         for i in 1..=5 {
-            let test_meeting = get_test_item("task", "work", &format!("meeting{}", i));
-            insert_item(&conn, &test_meeting).unwrap();
+            insert_task(&conn, "work", &format!("meeting{}", i), "today");
         }
         for i in 1..=3 {
-            let test_feeding = get_test_item("task", "life", &format!("feeding{}", i));
-            insert_item(&conn, &test_feeding).unwrap();
+            insert_task(&conn, "life", &format!("feeding{}", i), "today");
         }
 
         let item_query = ItemQuery::new().with_action("task").with_category("work");
@@ -275,5 +281,55 @@ mod tests {
         let limited_items =
             query_items(&conn, &ItemQuery::new().with_action("task").with_limit(4)).unwrap();
         assert_eq!(limited_items.len(), 4);
+    }
+
+    #[test]
+    fn test_query_statuses() {
+        let (conn, _temp_file) = get_test_conn();
+        for i in 1..=2 {
+            let rowid = insert_task(&conn, "pending", &format!("pending-task-{}", i), "today");
+            update_status(&conn, rowid, 6);
+        }
+        for i in 1..=3 {
+            let rowid = insert_task(&conn, "done", &format!("completed-task-{}", i), "today");
+            update_status(&conn, rowid, 1);
+        }
+        for i in 1..=4 {
+            insert_task(&conn, "ongoing", &format!("ongoing-task-{}", i), "today");
+        }
+        let rowid = insert_task(&conn, "cancelled", "cancelled-task-0", "today");
+        update_status(&conn, rowid, 2);
+
+        let ongoing_tasks = query_items(
+            &conn,
+            &ItemQuery::new().with_statuses(vec![0]).with_action("task"),
+        )
+        .expect("Unable to execute query");
+        assert_eq!(ongoing_tasks.len(), 4);
+        assert!(ongoing_tasks.iter().all(|t| t.category == "ongoing"));
+
+        let open_tasks = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_statuses(vec![0, 6])
+                .with_action("task"),
+        )
+        .expect("Unable to execute query");
+        assert_eq!(open_tasks.len(), 6);
+        assert!(open_tasks
+            .iter()
+            .all(|t| t.category == "ongoing" || t.category == "pending"));
+
+        let closed_tasks = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_statuses(vec![1, 2, 3])
+                .with_action("task"),
+        )
+        .expect("Unable to execute query");
+        assert_eq!(closed_tasks.len(), 4);
+        assert!(closed_tasks
+            .iter()
+            .all(|t| t.category == "done" || t.category == "cancelled"));
     }
 }
