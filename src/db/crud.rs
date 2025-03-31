@@ -13,7 +13,10 @@ use rusqlite::{
 use crate::db::item::{
     Item,
     ItemQuery,
+    Offset,
 };
+
+const VALID_ORDER_COLUMNS: &[&str] = &["id", "create_time", "target_time"];
 
 pub fn insert_item(conn: &Connection, item: &Item) -> Result<i64> {
     conn.execute(
@@ -74,7 +77,6 @@ pub fn delete_item(conn: &Connection, item_id: i64) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn query_items(
     conn: &Connection,
     item_query: &ItemQuery,
@@ -92,19 +94,29 @@ pub fn query_items(
         params.push(c.to_string());
     }
 
-    if let Some(ct_min) = item_query.create_time_min {
-        conditions.push("create_time >= ?".to_string());
-        params.push(ct_min.to_string());
+    let ct_min = if let Offset::CreateTime(time) = item_query.offset {
+        Some(time)
+    } else {
+        item_query.create_time_min
+    };
+    if let Some(time) = ct_min {
+        conditions.push("create_time > ?".to_string());
+        params.push(time.to_string());
+    }
+
+    let tt_min = if let Offset::TargetTime(time) = item_query.offset {
+        Some(time)
+    } else {
+        item_query.target_time_min
+    };
+    if let Some(time) = tt_min {
+        conditions.push("target_time > ?".to_string());
+        params.push(time.to_string());
     }
 
     if let Some(ct_max) = item_query.create_time_max {
         conditions.push("create_time <= ?".to_string());
         params.push(ct_max.to_string());
-    }
-
-    if let Some(tt_min) = item_query.target_time_min {
-        conditions.push("target_time >= ?".to_string());
-        params.push(tt_min.to_string());
     }
 
     if let Some(tt_max) = item_query.target_time_max {
@@ -121,22 +133,30 @@ pub fn query_items(
         conditions.push(format!("status IN ({})", status_list));
     }
 
+    if let Offset::Id(rowid) = item_query.offset {
+        conditions.push("id > ?".to_string());
+        params.push(rowid.to_string());
+    }
+
     let mut querystr = String::from("SELECT * FROM items");
     if !conditions.is_empty() {
         querystr.push_str(" WHERE ");
         querystr.push_str(&conditions.join(" AND "));
     }
 
-    if let Some(offset_id) = item_query.offset_id {
-        if conditions.is_empty() {
-            querystr.push_str(" WHERE id > ?");
-        } else {
-            querystr.push_str(" AND id > ?");
-        }
-        params.push(offset_id.to_string());
+    let order_column = match item_query.offset {
+        Offset::Id(_) => "id",
+        Offset::CreateTime(_) => "create_time",
+        Offset::TargetTime(_) => "target_time",
+        Offset::None => item_query.order_by.unwrap_or("id"),
+    };
+    if !VALID_ORDER_COLUMNS.contains(&order_column) {
+        return Err(rusqlite::Error::InvalidColumnName(format!(
+            "invalid column: {}",
+            order_column
+        )));
     }
-
-    querystr.push_str(" ORDER BY id ASC");
+    querystr.push_str(&format!(" ORDER BY {} ASC", order_column));
 
     if let Some(limit) = item_query.limit {
         querystr.push_str(" LIMIT ?");
@@ -162,6 +182,7 @@ mod tests {
         db::item::Item,
         tests::{
             get_test_conn,
+            insert_record,
             insert_task,
             update_status,
         },
@@ -331,5 +352,152 @@ mod tests {
         assert!(closed_tasks
             .iter()
             .all(|t| t.category == "done" || t.category == "cancelled"));
+    }
+
+    // Test pagination capability for tasks
+    #[test]
+    fn test_query_offset_tasks() {
+        let (conn, _temp_file) = get_test_conn();
+        for i in 1..=11 {
+            insert_task(
+                &conn,
+                "test",
+                &format!("index {}", i),
+                &format!("tomorrow {}AM", i),
+            );
+        }
+
+        let items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("task")
+                .with_limit(5)
+                .with_order_by("target_time"),
+        )
+        .expect("Unable to execute query");
+        assert_eq!(items.len(), 5);
+        let last_item = items.last().unwrap();
+        assert_eq!(last_item.content, "index 5");
+        let offset_target_time = last_item.target_time.unwrap();
+
+        let next_items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("task")
+                .with_limit(5)
+                .with_offset(Offset::TargetTime(offset_target_time)),
+        )
+        .unwrap();
+        assert_eq!(next_items.len(), 5);
+        assert_eq!(next_items.first().unwrap().content, "index 6");
+        let last_item = next_items.last().unwrap();
+        assert_eq!(last_item.content, "index 10");
+        let offset_target_time = last_item.target_time.unwrap();
+
+        let next_items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("task")
+                .with_limit(5)
+                .with_offset(Offset::TargetTime(offset_target_time)),
+        )
+        .unwrap();
+        assert_eq!(next_items.len(), 1);
+        assert_eq!(next_items[0].content, "index 11");
+    }
+
+    #[test]
+    fn test_query_offset_records() {
+        let (conn, _temp_file) = get_test_conn();
+        for i in 1..=11 {
+            insert_record(
+                &conn,
+                "test",
+                &format!("index {}", i),
+                &format!("yesterday {}PM", i),
+            );
+        }
+
+        let items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("record")
+                .with_limit(5)
+                .with_order_by("create_time"),
+        )
+        .expect("Unable to execute query");
+        assert_eq!(items.len(), 5);
+        let last_item = items.last().unwrap();
+        assert_eq!(last_item.content, "index 5");
+
+        let next_items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("record")
+                .with_limit(5)
+                .with_offset(Offset::CreateTime(last_item.create_time)),
+        )
+        .unwrap();
+        assert_eq!(next_items.len(), 5);
+        assert_eq!(next_items.first().unwrap().content, "index 6");
+        let last_item = next_items.last().unwrap();
+        assert_eq!(last_item.content, "index 10");
+
+        let next_items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("record")
+                .with_limit(5)
+                .with_offset(Offset::CreateTime(last_item.create_time)),
+        )
+        .unwrap();
+        assert_eq!(next_items.len(), 1);
+        assert_eq!(next_items[0].content, "index 11");
+    }
+
+    #[test]
+    fn test_offset_id() {
+        let (conn, _temp_file) = get_test_conn();
+        for i in 1..=11 {
+            insert_record(
+                &conn,
+                "test",
+                &format!("index {}", i),
+                &format!("yesterday {}PM", i),
+            );
+        }
+        let final_item = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("record")
+                .with_limit(10)
+                .with_offset(Offset::Id(10)),
+        )
+        .expect("Unable to execute query");
+        assert_eq!(final_item.len(), 1);
+        assert_eq!(final_item[0].content, "index 11");
+    }
+
+    #[test]
+    fn test_order_by() {
+        let (conn, _temp_file) = get_test_conn();
+        insert_record(&conn, "rec", "rec1", "yesterday");
+        insert_record(&conn, "rec", "rec2", "today");
+        insert_record(&conn, "rec", "rec3", "tomorrow");
+        insert_task(&conn, "task", "task1", "today");
+        insert_task(&conn, "task", "task2", "tomorrow");
+        insert_task(&conn, "task", "task3", "yesterday");
+        let result = query_items(&conn, &ItemQuery::new().with_order_by("create_time")).unwrap();
+        assert_eq!(result.first().unwrap().content, "rec1");
+        assert_eq!(result.last().unwrap().content, "rec3");
+        let result = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("task")
+                .with_order_by("target_time"),
+        )
+        .unwrap();
+        assert_eq!(result.first().unwrap().content, "task3");
+        assert_eq!(result.last().unwrap().content, "task2");
     }
 }

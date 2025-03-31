@@ -75,6 +75,7 @@ impl Item {
 }
 
 // Query Struct for querying items from db
+#[derive(Debug)]
 pub struct ItemQuery<'a> {
     pub action: Option<&'a str>,
     pub category: Option<&'a str>,
@@ -84,7 +85,17 @@ pub struct ItemQuery<'a> {
     pub target_time_max: Option<i64>,
     pub statuses: Option<Vec<u8>>,
     pub limit: Option<usize>,
-    pub offset_id: Option<i64>,
+    pub offset: Offset,
+    pub order_by: Option<&'a str>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum Offset {
+    None,
+    Id(i64),
+    CreateTime(i64),
+    TargetTime(i64),
 }
 
 #[allow(dead_code)]
@@ -99,7 +110,8 @@ impl<'a> ItemQuery<'a> {
             target_time_max: None,
             statuses: None,
             limit: None,
-            offset_id: None,
+            offset: Offset::None,
+            order_by: None,
         }
     }
 
@@ -155,8 +167,13 @@ impl<'a> ItemQuery<'a> {
         self
     }
 
-    pub fn with_offset_id(mut self, offset_id: i64) -> Self {
-        self.offset_id = Some(offset_id);
+    pub fn with_offset(mut self, offset: Offset) -> Self {
+        self.offset = offset;
+        self
+    }
+
+    pub fn with_order_by(mut self, order_by: &'a str) -> Self {
+        self.order_by = Some(order_by);
         self
     }
 }
@@ -229,7 +246,8 @@ mod tests {
         assert_eq!(query.target_time_max, None);
         assert_eq!(query.statuses, None);
         assert_eq!(query.limit, None);
-        assert_eq!(query.offset_id, None);
+        assert_eq!(query.offset, Offset::None);
+        assert_eq!(query.order_by, None);
 
         let query = ItemQuery::new().with_action("task");
         assert_eq!(query.action, Some("task"));
@@ -263,6 +281,7 @@ mod tests {
         assert_eq!(query.target_time_max, None);
         assert_eq!(query.statuses, None);
         assert_eq!(query.limit, Some(100));
-        assert_eq!(query.offset_id, None);
+        assert_eq!(query.offset, Offset::None);
+        assert_eq!(query.order_by, None);
     }
 }
