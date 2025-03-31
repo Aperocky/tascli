@@ -27,8 +27,7 @@ const OPEN_STATUS_CODES: &[u8] = &[0, 4, 6];
 const CLOSED_STATUS_CODES: &[u8] = &[1, 2, 3, 5];
 
 pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(), String> {
-    let mut records = query_records(conn, &cmd)?;
-    order_items(&mut records, CREATE_TIME_COL)?;
+    let records = query_records(conn, &cmd)?;
 
     cache::clear(conn).map_err(|e| e.to_string())?;
     cache::store(conn, &records).map_err(|e| e.to_string())?;
@@ -39,8 +38,7 @@ pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(
 }
 
 pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), String> {
-    let mut tasks = query_tasks(conn, &cmd)?;
-    order_items(&mut tasks, TARGET_TIME_COL)?;
+    let tasks = query_tasks(conn, &cmd)?;
 
     cache::clear(conn).map_err(|e| e.to_string())?;
     cache::store(conn, &tasks).map_err(|e| e.to_string())?;
@@ -68,6 +66,7 @@ fn query_records(conn: &Connection, cmd: &ListRecordCommand) -> Result<Vec<Item>
         record_query = record_query.with_create_time_max(ending_timestamp);
     }
     record_query = record_query.with_limit(cmd.limit);
+    record_query = record_query.with_order_by(CREATE_TIME_COL);
     query_items(conn, &record_query).map_err(|e| e.to_string())
 }
 
@@ -97,27 +96,8 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
         _ => task_query = task_query.with_statuses(vec![cmd.status]),
     }
     task_query = task_query.with_limit(cmd.limit);
+    task_query = task_query.with_order_by(TARGET_TIME_COL);
     query_items(conn, &task_query).map_err(|e| e.to_string())
-}
-
-fn order_items(items: &mut [Item], by: &str) -> Result<(), String> {
-    match by {
-        CREATE_TIME_COL => {
-            items.sort_by_key(|item| item.create_time);
-            Ok(())
-        }
-        TARGET_TIME_COL => {
-            // Check all items have target_time before sorting
-            for item in items.iter() {
-                if item.target_time.is_none() {
-                    return Err("Task missing target_time, something went wrong".to_string());
-                }
-            }
-            items.sort_by_key(|item| item.target_time.unwrap());
-            Ok(())
-        }
-        _ => Err(format!("Cannot order by '{}'", by)),
-    }
 }
 
 #[cfg(test)]
@@ -177,73 +157,11 @@ mod tests {
     }
 
     #[test]
-    fn test_order_by_create_time() {
-        let mut items = vec![
-            Item::with_create_time(
-                "task".to_string(),
-                "test".to_string(),
-                "content1".to_string(),
-                300,
-            ),
-            Item::with_create_time(
-                "task".to_string(),
-                "test".to_string(),
-                "content2".to_string(),
-                100,
-            ),
-            Item::with_create_time(
-                "task".to_string(),
-                "test".to_string(),
-                "content3".to_string(),
-                200,
-            ),
-        ];
-
-        let result = order_items(&mut items, CREATE_TIME_COL);
-        assert!(result.is_ok());
-
-        assert_eq!(items[0].content, "content2");
-        assert_eq!(items[1].content, "content3");
-        assert_eq!(items[2].content, "content1");
-    }
-
-    #[test]
-    fn test_order_by_target_time() {
-        let mut items = vec![
-            Item::with_target_time(
-                "record".to_string(),
-                "test".to_string(),
-                "content1".to_string(),
-                Some(300),
-            ),
-            Item::with_target_time(
-                "record".to_string(),
-                "test".to_string(),
-                "content2".to_string(),
-                Some(100),
-            ),
-            Item::with_target_time(
-                "record".to_string(),
-                "test".to_string(),
-                "content3".to_string(),
-                Some(200),
-            ),
-        ];
-
-        let result = order_items(&mut items, TARGET_TIME_COL);
-        assert!(result.is_ok());
-
-        assert_eq!(items[0].content, "content2");
-        assert_eq!(items[1].content, "content3");
-        assert_eq!(items[2].content, "content1");
-    }
-
-    #[test]
     fn test_query_tasks() {
         let (conn, _temp_file) = get_test_conn();
-        insert_task(&conn, "life", "gather w2", "eow");
-        insert_task(&conn, "fun", "write list.rs tests", "today");
-        insert_task(&conn, "fun", "expired content", "yesterday");
+        insert_task(&conn, "life", "third_due", "tomorrow");
+        insert_task(&conn, "fun", "second_due", "today");
+        insert_task(&conn, "fun", "first_due", "yesterday");
         let mut list_tasks_default = ListTaskCommand {
             timestr: None,
             category: None,
@@ -254,9 +172,12 @@ mod tests {
         };
         let results = query_tasks(&conn, &list_tasks_default).unwrap();
         assert_eq!(results.len(), 2);
+        assert_eq!(results.first().unwrap().content, "second_due");
+        assert_eq!(results.last().unwrap().content, "third_due");
         list_tasks_default.overdue = true;
         let results = query_tasks(&conn, &list_tasks_default).unwrap();
         assert_eq!(results.len(), 3);
+        assert_eq!(results.first().unwrap().content, "first_due");
     }
 
     #[test]
