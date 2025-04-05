@@ -31,6 +31,16 @@ pub fn store(conn: &Connection, items: &[Item]) -> Result<()> {
     store_kv(conn, kv)
 }
 
+// add a next token marker
+pub fn store_with_next(conn: &Connection, items: &[Item]) -> Result<()> {
+    store(conn, items)?;
+    conn.execute(
+        "INSERT OR REPLACE INTO cache (key, value) VALUES (?1, ?2)",
+        [-1, items.len() as i64],
+    )?;
+    Ok(())
+}
+
 pub fn validate_cache(conn: &Connection) -> Result<bool> {
     let timestamp = match read(conn, 0)? {
         Some(t) => t,
@@ -70,6 +80,10 @@ pub fn read(conn: &Connection, index: i64) -> Result<Option<i64>> {
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(err) => Err(err),
     }
+}
+
+pub fn get_next_index(conn: &Connection) -> Result<Option<i64>> {
+    read(conn, -1)
 }
 
 pub fn clear(conn: &Connection) -> Result<()> {
@@ -180,5 +194,11 @@ mod tests {
         // Verify non-existent index returns None
         let id4 = read(&conn, 4).expect("Failed to read non-existent index");
         assert_eq!(id4, None, "Non-existent index should return None");
+
+        // Test next token
+        assert_eq!(get_next_index(&conn).unwrap(), None);
+        clear(&conn).unwrap();
+        store_with_next(&conn, &items).expect("Failed to store items in cache");
+        assert_eq!(get_next_index(&conn).unwrap(), Some(3));
     }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.4.0
+
+- ✨ Add pagination for list task and list record with --next-page (-n)
+- ⚡ Use sqlite order_by with index for list actions
+
 ### v0.3.0
 
 - ✨ Add starting-time and ending-time optional argument for list records

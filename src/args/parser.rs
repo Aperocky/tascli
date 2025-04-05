@@ -125,6 +125,9 @@ pub struct ListTaskCommand {
     /// Limit the amount of tasks returned
     #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
     pub limit: usize,
+    /// Next page if the previous list command reached limit
+    #[arg(short, long, default_value_t = false)]
+    pub next_page: bool
 }
 
 #[derive(Debug, Args)]
@@ -147,6 +150,9 @@ pub struct ListRecordCommand {
     /// If this is date only, then it is inclusive
     #[arg(short, long, value_parser = validate_timestr, conflicts_with = "days")]
     pub ending_time: Option<String>,
+    /// Next page if the previous list command reached limit
+    #[arg(short, long, default_value_t = false)]
+    pub next_page: bool
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
@@ -161,6 +167,9 @@ fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
 
 fn validate_limit(s: &str) -> Result<usize, String> {
     let limit: usize = s.parse().map_err(|_| "Must be a number".to_string())?;
+    if limit < 1 {
+        return Err("Limit cannot be less than 1".to_string());
+    }
     if limit > 65536 {
         return Err("Limit cannot exceed 65536".to_string());
     }

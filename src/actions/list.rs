@@ -12,10 +12,14 @@ use crate::{
     },
     db::{
         cache,
-        crud::query_items,
+        crud::{
+            get_item,
+            query_items,
+        },
         item::{
             Item,
             ItemQuery,
+            Offset,
         },
     },
 };
@@ -27,10 +31,25 @@ const OPEN_STATUS_CODES: &[u8] = &[0, 4, 6];
 const CLOSED_STATUS_CODES: &[u8] = &[1, 2, 3, 5];
 
 pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(), String> {
-    let records = query_records(conn, &cmd)?;
+    let records = match query_records(conn, &cmd) {
+        Ok(records) => records,
+        Err(estr) => {
+            display::print_bold(&estr);
+            return Ok(());
+        }
+    };
+    if records.is_empty() {
+        display::print_bold("No records found");
+        return Ok(());
+    }
 
     cache::clear(conn).map_err(|e| e.to_string())?;
-    cache::store(conn, &records).map_err(|e| e.to_string())?;
+    if records.len() == cmd.limit {
+        cache::store_with_next(conn, &records)
+    } else {
+        cache::store(conn, &records)
+    }
+    .map_err(|e| e.to_string())?;
 
     display::print_bold("Records List:");
     display::print_items(&records, true, true);
@@ -38,10 +57,25 @@ pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(
 }
 
 pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), String> {
-    let tasks = query_tasks(conn, &cmd)?;
+    let tasks = match query_tasks(conn, &cmd) {
+        Ok(tasks) => tasks,
+        Err(estr) => {
+            display::print_bold(&estr);
+            return Ok(());
+        }
+    };
+    if tasks.is_empty() {
+        display::print_bold("No tasks found");
+        return Ok(());
+    }
 
     cache::clear(conn).map_err(|e| e.to_string())?;
-    cache::store(conn, &tasks).map_err(|e| e.to_string())?;
+    if tasks.len() == cmd.limit {
+        cache::store_with_next(conn, &tasks)
+    } else {
+        cache::store(conn, &tasks)
+    }
+    .map_err(|e| e.to_string())?;
 
     display::print_bold("Tasks List:");
     display::print_items(&tasks, false, true);
@@ -65,6 +99,17 @@ fn query_records(conn: &Connection, cmd: &ListRecordCommand) -> Result<Vec<Item>
         let ending_timestamp = timestr::to_unix_epoch(ending_time)?;
         record_query = record_query.with_create_time_max(ending_timestamp);
     }
+
+    let mut offset = Offset::None;
+    if cmd.next_page {
+        offset = handle_next_page(conn);
+        match offset {
+            Offset::CreateTime(_) => {}
+            Offset::None => return Err("No next page available".to_string()),
+            _ => return Err("next page not meant for this call".to_string()),
+        }
+    }
+    record_query = record_query.with_offset(offset);
     record_query = record_query.with_limit(cmd.limit);
     record_query = record_query.with_order_by(CREATE_TIME_COL);
     query_items(conn, &record_query).map_err(|e| e.to_string())
@@ -85,19 +130,52 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
     if let Some(cat) = &cmd.category {
         task_query = task_query.with_category(cat);
     }
+
     match cmd.status {
         // 255 status means we query all task items regardless of status.
         255 => {}
         // 254 status indicates a combination of statuses that are open
         254 => task_query = task_query.with_statuses(OPEN_STATUS_CODES.to_vec()),
-        // 254 status indicates a combination of statuses that are closed
+        // 253 status indicates a combination of statuses that are closed
         253 => task_query = task_query.with_statuses(CLOSED_STATUS_CODES.to_vec()),
         // Other statuses are individual statuses for query
         _ => task_query = task_query.with_statuses(vec![cmd.status]),
     }
+
+    let mut offset = Offset::None;
+    if cmd.next_page {
+        offset = handle_next_page(conn);
+        match offset {
+            Offset::TargetTime(_) => {}
+            Offset::None => return Err("No next page available".to_string()),
+            _ => return Err("next page not meant for this call".to_string()),
+        }
+    }
+    task_query = task_query.with_offset(offset);
     task_query = task_query.with_limit(cmd.limit);
     task_query = task_query.with_order_by(TARGET_TIME_COL);
     query_items(conn, &task_query).map_err(|e| e.to_string())
+}
+
+fn handle_next_page(conn: &Connection) -> Offset {
+    let offset_index = match cache::get_next_index(conn) {
+        Ok(Some(index)) => index,
+        Ok(None) | Err(_) => return Offset::None,
+    };
+    let end_item_index = match cache::read(conn, offset_index) {
+        Ok(Some(index)) => index,
+        Ok(None) | Err(_) => return Offset::None,
+    };
+    let end_item = match get_item(conn, end_item_index) {
+        Ok(item) => item,
+        Err(_) => return Offset::None,
+    };
+    if end_item.action == "task" {
+        return Offset::TargetTime(end_item.target_time.unwrap());
+    } else if end_item.action == "record" {
+        return Offset::CreateTime(end_item.create_time);
+    }
+    Offset::None
 }
 
 #[cfg(test)]
@@ -123,6 +201,7 @@ mod tests {
             limit: 100,
             starting_time: None,
             ending_time: None,
+            next_page: false,
         };
         let list_all = ListRecordCommand {
             category: None,
@@ -130,6 +209,7 @@ mod tests {
             limit: 100,
             starting_time: None,
             ending_time: None,
+            next_page: false,
         };
         let list_timeframe = ListRecordCommand {
             category: None,
@@ -137,6 +217,7 @@ mod tests {
             limit: 100,
             starting_time: Some("yesterday 4PM".to_string()),
             ending_time: Some("yesterday 8PM".to_string()),
+            next_page: false,
         };
         let list_timeframe_start_only = ListRecordCommand {
             category: None,
@@ -144,6 +225,7 @@ mod tests {
             limit: 100,
             starting_time: Some("yesterday 8PM".to_string()),
             ending_time: None,
+            next_page: false,
         };
         let results = query_records(&conn, &listfeeding).unwrap();
         assert_eq!(results.len(), 3);
@@ -169,6 +251,7 @@ mod tests {
             status: 0,
             overdue: false,
             limit: 100,
+            next_page: false,
         };
         let results = query_tasks(&conn, &list_tasks_default).unwrap();
         assert_eq!(results.len(), 2);
@@ -178,6 +261,103 @@ mod tests {
         let results = query_tasks(&conn, &list_tasks_default).unwrap();
         assert_eq!(results.len(), 3);
         assert_eq!(results.first().unwrap().content, "first_due");
+    }
+
+    #[test]
+    fn test_query_records_pagination() {
+        let (conn, _temp_file) = get_test_conn();
+        for i in 1..=11 {
+            insert_record(
+                &conn,
+                "test",
+                &format!("B{}", i),
+                &format!("2025/02/25 {}AM", i),
+            );
+            insert_record(
+                &conn,
+                "test",
+                &format!("A{}", i),
+                &format!("2025/02/23 {}PM", i),
+            );
+        }
+
+        let mut list_record = ListRecordCommand {
+            category: Some("test".to_string()),
+            days: None,
+            limit: 11,
+            next_page: false,
+            starting_time: Some("2025/02/21".to_string()),
+            ending_time: Some("2025/02/27".to_string()),
+        };
+
+        let results = query_records(&conn, &list_record).unwrap();
+        cache::clear(&conn).unwrap();
+        cache::store_with_next(&conn, &results).unwrap();
+        assert_eq!(results.len(), 11);
+        assert!(results.iter().all(|i| i.content.contains("A")));
+        list_record.next_page = true;
+
+        let results = query_records(&conn, &list_record).unwrap();
+        cache::clear(&conn).unwrap();
+        cache::store_with_next(&conn, &results).unwrap();
+        assert_eq!(results.len(), 11);
+        assert!(results.iter().all(|i| i.content.contains("B")));
+
+        let results = query_records(&conn, &list_record).unwrap();
+        cache::clear(&conn).unwrap();
+        cache::store(&conn, &results).unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_query_tasks_pagination() {
+        let (conn, _temp_file) = get_test_conn();
+        for i in 1..=11 {
+            insert_task(
+                &conn,
+                "test",
+                &format!("index {}PM", i),
+                &format!("tomorrow {}PM", i),
+            );
+            insert_task(
+                &conn,
+                "test",
+                &format!("index {}AM", i),
+                &format!("tomorrow {}AM", i),
+            );
+        }
+
+        let mut list_task = ListTaskCommand {
+            timestr: None,
+            category: Some("test".to_string()),
+            days: None,
+            status: 0,
+            overdue: false,
+            limit: 10,
+            next_page: false,
+        };
+
+        let results = query_tasks(&conn, &list_task).unwrap();
+        cache::store_with_next(&conn, &results).unwrap();
+        assert_eq!(results.len(), 10);
+        assert!(results.iter().all(|i| i.content.contains("AM")));
+        list_task.next_page = true;
+        let results = query_tasks(&conn, &list_task).unwrap();
+
+        cache::clear(&conn).unwrap();
+        cache::store_with_next(&conn, &results).unwrap();
+        assert_eq!(results.len(), 10);
+        assert_eq!(results.first().unwrap().content, "index 11AM");
+        assert_eq!(results.last().unwrap().content, "index 9PM");
+        let results = query_tasks(&conn, &list_task).unwrap();
+
+        cache::clear(&conn).unwrap();
+        cache::store(&conn, &results).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.first().unwrap().content, "index 10PM");
+        assert_eq!(results.last().unwrap().content, "index 11PM");
+        let results = query_tasks(&conn, &list_task);
+        assert_eq!(results.unwrap_err(), "No next page available".to_string());
     }
 
     #[test]
@@ -203,6 +383,7 @@ mod tests {
             limit: 100,
             status: 254,
             overdue: false,
+            next_page: false,
         };
         let list_closed = ListTaskCommand {
             timestr: None,
@@ -211,6 +392,7 @@ mod tests {
             limit: 100,
             status: 253,
             overdue: false,
+            next_page: false,
         };
         let results = query_tasks(&conn, &list_open).expect("Unable to query");
         assert_eq!(results.len(), 6);
