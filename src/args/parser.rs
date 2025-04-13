@@ -201,7 +201,7 @@ fn parse_status(s: &str) -> Result<u8, String> {
         "cancelled" | "canceled" | "cancel" => Ok(2),
         "duplicate" => Ok(3),
         "deferred" | "suspended" | "shelved" => Ok(4),
-        "removed" | "remove" => Ok(5),
+        "removed" | "remove" | "unneeded" | "unnecessary" => Ok(5),
         "pending" => Ok(6),
         "closed" => Ok(253), // combination of done | cancelled | duplicate | removed
         "open" => Ok(254), // combination of ongoing | pending | suspended
