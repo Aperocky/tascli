@@ -4,7 +4,7 @@
 [![run tests](https://github.com/Aperocky/tascli/workflows/run%20tests/badge.svg)](https://github.com/Aperocky/tascli/actions?query=workflow%3Arun%20tests)
 ![Downloads](https://img.shields.io/crates/d/tascli.svg)
 
-A *simple* CLI tool for tracking tasks and records from terminal.
+A *simple* CLI tool for tracking tasks and records from unix terminal.
 
 Installation:
 

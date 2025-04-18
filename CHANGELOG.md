@@ -1,5 +1,11 @@
 # Changelog
 
+### v0.5.0
+
+- ✨ Correctly space unicode characters in the table.
+- 🏗️ Refactor display utility to a module, remove dependency on textwrap
+- 📦 Bundle rusqlite (compiled size now 4.7MB)
+
 ### v0.4.0
 
 - ✨ Add pagination for list task and list record with --next-page (-n)
