@@ -5,8 +5,11 @@ use clap::{
 };
 use crate::args::timestr::parse_flexible_timestr;
 
+/// a simple CLI tool for tracking tasks and records from terminal
+///
+/// data is stored at ~/.local/share/tascli/tascli.db
 #[derive(Debug, Parser)]
-#[command(author, version, about)]
+#[command(author, version)]
 pub struct CliArgs {
     #[command(subcommand)]
     pub arguments: Action,
@@ -14,15 +17,15 @@ pub struct CliArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum Action {
-    /// add task with end time
+    /// add task
     Task(TaskCommand),
     /// add record
     Record(RecordCommand),
-    /// Finish tasks
+    /// shortcut to complete tasks
     Done(DoneCommand),
-    /// Update tasks or records wording/deadlines
+    /// update task and record entries.
     Update(UpdateCommand),
-    /// Delete Records or Tasks
+    /// delete task or record
     Delete(DeleteCommand),
     /// list tasks or records
     #[command(subcommand)]
@@ -31,65 +34,65 @@ pub enum Action {
 
 #[derive(Debug, Args)]
 pub struct TaskCommand {
-    /// Description of the task
+    /// description of the task
     #[arg(value_parser = |s: &str| syntax_helper("task", s))]
     pub content: String,
-    /// Time the task is due, default to EOD
+    /// time the task is due for completion, default to EOD
     #[arg(value_parser = validate_timestr)]
     pub timestr: Option<String>,
-    /// Category of the task
+    /// category of the task
     #[arg(short, long)]
     pub category: Option<String>,
 }
 
 #[derive(Debug, Args)]
 pub struct RecordCommand {
-    /// Content of the record
+    /// content of the record
     #[arg(value_parser = |s: &str| syntax_helper("record", s))]
     pub content: String,
-    /// Category of the record
+    /// category of the record
     #[arg(short, long)]
     pub category: Option<String>,
-    /// Time the record should be made, default to current
+    /// time the record is made, default to current time
     #[arg(short = 't', long = "time", value_parser = validate_timestr)]
     pub timestr: Option<String>,
 }
 
 #[derive(Debug, Args)]
 pub struct DoneCommand {
-    /// Index from previous List command
+    /// index from previous list command
     #[arg(value_parser = validate_index)]
     pub index: usize,
-    /// Status, [done|cancelled|remove], default to done.
+    /// optional status, default to done.
     #[arg(short, long, value_parser = parse_status, default_value_t = 1)]
     pub status: u8,
 }
 
 #[derive(Debug, Args)]
 pub struct DeleteCommand {
-    /// Index from previous List command
+    /// index from previous list command
     #[arg(value_parser = validate_index)]
     pub index: usize,
 }
 
 #[derive(Debug, Args)]
 pub struct UpdateCommand {
-    /// Index from previous List command
+    /// index from previous list command
     #[arg(value_parser = validate_index)]
     pub index: usize,
-    /// Update target completion time.
+    /// update the target time of task or event time of record.
     #[arg(short, long, value_parser = validate_timestr)]
     pub target_time: Option<String>,
-    /// Update category of the task/record
+    /// update category of the task/record
     #[arg(short, long)]
     pub category: Option<String>,
-    /// Update all of content
+    /// replace the content of the task/record
     #[arg(short='w', long)]
     pub content: Option<String>,
-    /// Add to content
+    /// add to entry content in a newline 
     #[arg(short, long)]
     pub add_content: Option<String>,
-    /// Edit the status of the tasks
+    /// update status of the tasks
     /// accept ongoing|done|cancelled|duplicate|suspended|pending
     #[arg(short, long, value_parser = parse_status)]
     pub status: Option<u8>
@@ -97,60 +100,61 @@ pub struct UpdateCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ListCommand {
-    /// List tasks
+    /// list tasks
     Task(ListTaskCommand),
-    /// List records
+    /// list records
     Record(ListRecordCommand),
 }
 
 #[derive(Debug, Args)]
 pub struct ListTaskCommand {
-    /// Target completion date - e.g. "today"", only list task marked to be completed today.
+    /// task due time. e.g. today. when present, this restrict the task listed to be those that are
+    /// marked for completion prior to this time.
     pub timestr: Option<String>,
-    /// Category of the task
+    /// category of the task
     #[arg(short, long)]
     pub category: Option<String>,
     /// days in the future for tasks to list - mutually exclusive with timestr
     #[arg(short, long, conflicts_with = "timestr")]
     pub days: Option<usize>,
-    /// Status to list, default to "open"
+    /// status to list, default to "open"
     /// you can filter individually to ongoing|done|cancelled|duplicate|suspended|pending
     /// or aggregate status like open|closed|all
     #[arg(short, long, value_parser = parse_status, default_value_t = 254)]
     pub status: u8,
-    /// Show overdue tasks - tasks that are scheduled to be completed in the past
+    /// hhow overdue tasks - tasks that are scheduled to be completed in the past
     /// but were not closed, these tasks are not returned by default
     #[arg(short, long, default_value_t = false)]
     pub overdue: bool,
-    /// Limit the amount of tasks returned
+    /// limit the amount of tasks returned
     #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
     pub limit: usize,
-    /// Next page if the previous list command reached limit
+    /// next page if the previous list command reached limit
     #[arg(short, long, default_value_t = false)]
     pub next_page: bool
 }
 
 #[derive(Debug, Args)]
 pub struct ListRecordCommand {
-    /// Category of the record
+    /// category of the record
     #[arg(short, long)]
     pub category: Option<String>,
     /// days of records to retrieve - e.g. 1 shows record made in the last 24 hours.
     /// value of 7 would show record made in the past week.
     #[arg(short, long, conflicts_with_all = ["starting_date", "ending_date"])]
     pub days: Option<usize>,
-    /// Limit the amount of records returned
+    /// limit the amount of records returned
     #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
     pub limit: usize,
-    /// List the record starting from this time
-    /// If this is date only, then it is non-inclusive
+    /// list the record starting from this time
+    /// if this is date only, then it is non-inclusive
     #[arg(short, long, value_parser = validate_timestr, conflicts_with = "days")]
     pub starting_time: Option<String>,
-    /// List the record ending at this time
-    /// If this is date only, then it is inclusive
+    /// list the record ending at this time
+    /// if this is date only, then it is inclusive
     #[arg(short, long, value_parser = validate_timestr, conflicts_with = "days")]
     pub ending_time: Option<String>,
-    /// Next page if the previous list command reached limit
+    /// next page if the previous list command reached limit
     #[arg(short, long, default_value_t = false)]
     pub next_page: bool
 }
