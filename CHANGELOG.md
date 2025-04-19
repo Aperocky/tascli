@@ -1,5 +1,11 @@
 # Changelog
 
+### v0.5.2
+
+- 📝 Update command line help documentation
+- 📝 Add demo script with doitlive
+- 📦 Update rusqlite dependency
+
 ### v0.5.0
 
 - ✨ Correctly space unicode characters in the table.

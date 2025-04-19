@@ -12,7 +12,7 @@ Installation:
 cargo install tascli
 ```
 
-![tascli demo](tascli.gif)
+![tascli demo](demo/tascli.gif)
 
 ## Basic Usage
 
