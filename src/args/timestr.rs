@@ -105,12 +105,14 @@ fn parse_date_portion(s: &str, today: NaiveDate) -> Result<NaiveDate, String> {
     }
 
     // Also accept month/date shorthand like 3/24
-    let md_regex = regex::Regex::new(r"^(\d{1,2})/(\d{1,2})$").unwrap();
-    if let Some(caps) = md_regex.captures(s) {
-        let month: u32 = caps[1].parse().unwrap();
-        let day: u32 = caps[2].parse().unwrap();
-        if let Some(date) = NaiveDate::from_ymd_opt(today.year(), month, day) {
-            return Ok(date);
+    if s.contains('/') {
+        let parts: Vec<&str> = s.split('/').collect();
+        if parts.len() == 2 {
+            if let (Ok(month), Ok(day)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                if let Some(date) = NaiveDate::from_ymd_opt(today.year(), month, day) {
+                    return Ok(date);
+                }
+            }
         }
     }
 
@@ -132,11 +134,15 @@ fn parse_time_portion(s: &str) -> Result<NaiveTime, String> {
     }
 
     // Check for hour + AM/PM pattern without minutes (e.g., "3PM")
-    let hour_ampm_regex = regex::Regex::new(r"^(\d{1,2})(AM|PM|am|pm)$").unwrap();
-    if let Some(caps) = hour_ampm_regex.captures(s) {
-        let with_minutes = format!("{}:00{}", &caps[1], &caps[2]);
-        if let Ok(time) = NaiveTime::parse_from_str(&with_minutes, "%I:%M%p") {
-            return Ok(time);
+    let s_lower = s.to_lowercase();
+    if s_lower.ends_with("am") || s_lower.ends_with("pm") {
+        let ampm = &s_lower[s_lower.len() - 2..];
+        let hour_str = &s[..s.len() - 2];
+        if let Ok(hour) = hour_str.parse::<u8>() {
+            let with_minutes = format!("{}:00{}", hour, ampm);
+            if let Ok(time) = NaiveTime::parse_from_str(&with_minutes, "%I:%M%p") {
+                return Ok(time);
+            }
         }
     }
 
@@ -190,6 +196,7 @@ mod tests {
             "monday",
             "friday",
             "friday 3PM",
+            "3/24",
         ];
 
         for input in valid_inputs {
