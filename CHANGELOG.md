@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.5.3
+
+- 📦 Remove regex dependency
+- 📦 Reduce binary size with compilation flags; binary size now 1.5MB from 4.6MB
+
 ### v0.5.2
 
 - 📝 Update command line help documentation

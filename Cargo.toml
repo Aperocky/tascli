@@ -1,6 +1,6 @@
 [package]
 name = "tascli"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2024"
 description = "A simple CLI tool for tracking tasks and records from terminal"
 license = "MIT"
@@ -19,3 +19,8 @@ unicode-width = "0.2.0"
 
 [dev-dependencies]
 tempfile = "3.19.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
