@@ -15,9 +15,12 @@ pub fn debug_print_items(header: &str, items: &[Item]) {
     }
 }
 
-// print text in bold
 pub fn print_bold(text: &str) {
     println!("\x1b[1m{}\x1b[0m", text);
+}
+
+pub fn print_red(text: &str) {
+    println!("\x1b[91m{}\x1b[0m", text);
 }
 
 // print items in a table.

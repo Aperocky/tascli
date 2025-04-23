@@ -1,5 +1,9 @@
 # Changelog
 
+### v0.5.4
+
+- 🎨 error output to be bright red.
+
 ### v0.5.3
 
 - 📦 Remove regex dependency

@@ -434,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "tascli"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "chrono",
  "clap",
