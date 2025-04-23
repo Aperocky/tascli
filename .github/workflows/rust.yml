@@ -32,9 +32,6 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install SQLite dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
