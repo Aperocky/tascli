@@ -1,26 +1,6 @@
-use std::{
-    env,
-    fs,
-    path::PathBuf,
-};
-
 use rusqlite::Connection;
 
-const DB_NAME: &str = "tascli.db";
-
-fn get_data_dir() -> PathBuf {
-    let home_dir = env::var_os("HOME")
-        .map(PathBuf::from)
-        .expect("$HOME environment variable not set");
-    let data_dir = home_dir.join(".local").join("share").join("tascli");
-    fs::create_dir_all(&data_dir).expect("Failed to create data directory");
-    data_dir
-}
-
-fn get_db_path() -> PathBuf {
-    let data_dir = get_data_dir();
-    data_dir.join(DB_NAME)
-}
+use crate::config::get_data_path;
 
 pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute(
@@ -70,10 +50,10 @@ pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     Ok(())
 }
 
-pub fn connect() -> Result<Connection, rusqlite::Error> {
-    let db_path = get_db_path();
-    let conn = Connection::open(db_path)?;
-    init_table(&conn)?;
+pub fn connect() -> Result<Connection, String> {
+    let db_path = get_data_path()?;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    init_table(&conn).map_err(|e| e.to_string())?;
 
     Ok(conn)
 }

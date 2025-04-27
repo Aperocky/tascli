@@ -7,7 +7,8 @@ use crate::args::timestr::parse_flexible_timestr;
 
 /// a simple CLI tool for tracking tasks and records from terminal
 ///
-/// data is stored at ~/.local/share/tascli/tascli.db
+/// data is stored at ~/.local/share/tascli/tascli.db,
+/// or where defined in config at ~/.config/tascli/config.json
 #[derive(Debug, Parser)]
 #[command(author, version)]
 pub struct CliArgs {
