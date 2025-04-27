@@ -4,7 +4,7 @@
 [![run tests](https://github.com/Aperocky/tascli/workflows/run%20tests/badge.svg)](https://github.com/Aperocky/tascli/actions?query=workflow%3Arun%20tests)
 ![Downloads](https://img.shields.io/crates/d/tascli.svg)
 
-A *simple* CLI tool for tracking tasks and records from unix terminal.
+A *simple, fast, local* CLI tool for tracking tasks and records from unix terminal.
 
 Installation:
 
@@ -16,7 +16,7 @@ cargo install tascli
 
 ## Basic Usage
 
-Tasks and records are stored in `~/.local/share/tascli/tascli.db` with `rusqlite`.
+Tasks and records are stored in `~/.local/share/tascli/tascli.db` (configurable) with `rusqlite`.
 
 ### Tasks
 
@@ -141,6 +141,18 @@ This application accepts flexible time strings in various formats:
 - **Combined**: `2025-03-24 15:30`, `tomorrow 3PM`
 
 When only a date is provided, the time defaults to end of day (23:59:59). When only a time is provided, the date defaults to today.
+
+### Configuration
+
+If storing the db file in location other than `~/.local/share/tascli/tascli.db` is preferred, create a config file:
+
+```
+{
+    "data_dir": "/where/you/want/it"
+}
+```
+
+at `~/.config/tascli/config.json` to adjust the location of the stored file. Note, if you already have existing tasks, you may want to move/copy the db file there first.
 
 ### Help
 

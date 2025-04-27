@@ -1,5 +1,12 @@
 # Changelog
 
+### v0.6.0
+
+- ⚙️  Add optional configuration file, allow db file to be placed in custom location
+- ⚡ Add performance benchmark
+- ⚡ Performance optimization on db connection
+- 📝 Documentation updates including a README for benchmark
+
 ### v0.5.4
 
 - 🎨 error output to be bright red.
