@@ -2,7 +2,17 @@ use rusqlite::Connection;
 
 use crate::config::get_data_path;
 
+// Going forward, all schema changes require toggling
+// this DB_VERSION to a higher number.
+const DB_VERSION: i32 = 1;
+
 pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let current_version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+
+    if current_version == DB_VERSION {
+        return Ok(());
+    }
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +57,8 @@ pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
         [],
     )?;
 
+    conn.execute("PRAGMA user_version = 1", [])?;
+
     Ok(())
 }
 
@@ -88,6 +100,8 @@ mod tests {
             |row: &Row| row.get::<_, String>(0),
         );
         assert!(cache_table_exists.is_ok(), "Table 'cache' does not exist");
+        let pragma_version = conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0));
+        assert_eq!(1, pragma_version.unwrap());
 
         let second_result = init_table(&conn);
         assert!(
