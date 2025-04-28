@@ -10,11 +10,7 @@ Installation:
 
 ```bash
 cargo install tascli
-```
-
-with `brew`:
-
-```
+# or use brew
 brew tap Aperocky/tascli
 brew install tascli
 ```
