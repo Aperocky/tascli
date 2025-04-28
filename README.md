@@ -12,6 +12,13 @@ Installation:
 cargo install tascli
 ```
 
+with `brew`:
+
+```
+brew tap Aperocky/tascli
+brew install tascli
+```
+
 ![tascli demo](demo/tascli.gif)
 
 ## Basic Usage

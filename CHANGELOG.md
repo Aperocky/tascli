@@ -6,6 +6,7 @@
 - ⚡ Add performance benchmark
 - ⚡ Performance optimization on db connection
 - 📝 Documentation updates including a README for benchmark
+- 📦 Add `brew tap Aperocky/tascli` for `brew install tascli`
 
 ### v0.5.4
 
