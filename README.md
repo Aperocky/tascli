@@ -1,7 +1,7 @@
 # tascli
 
 [![Crates.io](https://img.shields.io/crates/v/tascli.svg)](https://crates.io/crates/tascli)
-[![run tests](https://github.com/Aperocky/tascli/workflows/run%20tests/badge.svg)](https://github.com/Aperocky/tascli/actions?query=workflow%3Arun%20tests)
+[![tests](https://github.com/Aperocky/tascli/workflows/run%20tests/badge.svg)](https://github.com/Aperocky/tascli/actions?query=workflow%3Atests)
 ![Downloads](https://img.shields.io/crates/d/tascli.svg)
 
 A *simple, fast, local* CLI tool for tracking tasks and records from unix terminal.
