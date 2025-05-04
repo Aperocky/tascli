@@ -39,10 +39,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc
-          sudo apt-get install -y zsh
           cargo install hyperfine
 
       - name: Run benchmarks
-        shell: zsh
         run: |
           ./bench/github_workflow.sh
