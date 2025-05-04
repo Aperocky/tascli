@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.6.1
+
+- ⚡ Batch cache index transaction to further speed up list operations.
+- ⚡ Add performance benchmark to github workflows
+
 ### v0.6.0
 
 - ⚙️  Add optional configuration file, allow db file to be placed in custom location

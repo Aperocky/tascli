@@ -1,6 +1,4 @@
-#!/bin/bash
-# Note this might fail to execute on MacOS default bash installation
-# As macOS bash defaults to v3.2.57, before associative arrays.
+#!/bin/zsh
 
 cd "$(dirname "$0")"
 ./basic.sh >output.txt 2>/dev/null
@@ -8,7 +6,7 @@ cd "$(dirname "$0")"
 declare -A standards
 standards["Task Insertion"]=10
 standards["Record Insertion"]=10
-standards["List Tasks"]=30
+standards["List Tasks"]=10
 standards["Task Deletion"]=10
 standards["Record Deletion"]=10
 failed=0

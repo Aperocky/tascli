@@ -58,13 +58,16 @@ pub fn validate_cache(conn: &Connection) -> Result<bool> {
 }
 
 fn store_kv(conn: &Connection, kv: Vec<(i64, i64)>) -> Result<()> {
-    let mut stmt = conn.prepare("INSERT OR REPLACE INTO cache (key, value) VALUES (?1, ?2)")?;
+    let tx = conn.unchecked_transaction()?;
+    {
+        let mut stmt =
+            tx.prepare_cached("INSERT OR REPLACE INTO cache (key, value) VALUES (?1, ?2)")?;
 
-    // Execute each statement individually
-    for (key, value) in kv {
-        stmt.execute(params![key, value])?;
+        for (key, value) in kv {
+            stmt.execute(params![key, value])?;
+        }
     }
-
+    tx.commit()?;
     Ok(())
 }
 
