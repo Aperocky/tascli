@@ -1,8 +1,12 @@
 # Changelog
 
+### v0.7.0
+
+- ✨ Add `--search` flag to list action to search content by text
+
 ### v0.6.1
 
-- ⚡ Batch cache index transaction to further speed up list operations.
+- ⚡ Batch cache index transaction to further speed up list operations
 - ⚡ Add performance benchmark to github workflows
 
 ### v0.6.0

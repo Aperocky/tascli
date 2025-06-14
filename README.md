@@ -76,7 +76,13 @@ List all tasks in `tascli` category (including completed)
 ```bash
 tascli list task -s all -c tascli
 ```
-output:
+
+Search tasks:
+```bash
+tascli list task --search "rust"
+```
+
+Example output:
 ```
 Task List:
 ----------------------------------------------------------------------------------------------
@@ -119,7 +125,12 @@ List records:
 tascli list record -d 1
 ```
 
-output:
+Search records:
+```bash
+tascli list record --search "secret"
+```
+
+Example output:
 ```
 Records List:
 ----------------------------------------------------------------------------------------------
