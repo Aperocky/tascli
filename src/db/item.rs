@@ -79,6 +79,7 @@ impl Item {
 pub struct ItemQuery<'a> {
     pub action: Option<&'a str>,
     pub category: Option<&'a str>,
+    pub content_like: Option<&'a str>,
     pub create_time_min: Option<i64>,
     pub create_time_max: Option<i64>,
     pub target_time_min: Option<i64>,
@@ -104,6 +105,7 @@ impl<'a> ItemQuery<'a> {
         ItemQuery {
             action: None,
             category: None,
+            content_like: None,
             create_time_min: None,
             create_time_max: None,
             target_time_min: None,
@@ -122,6 +124,11 @@ impl<'a> ItemQuery<'a> {
 
     pub fn with_category(mut self, category: &'a str) -> Self {
         self.category = Some(category);
+        self
+    }
+
+    pub fn with_content_like(mut self, content: &'a str) -> Self {
+        self.content_like = Some(content);
         self
     }
 

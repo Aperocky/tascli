@@ -94,6 +94,11 @@ pub fn query_items(
         params.push(c.to_string());
     }
 
+    if let Some(content) = item_query.content_like {
+        conditions.push("content LIKE ?".to_string());
+        params.push(format!("%{}%", content));
+    }
+
     let ct_min = if let Offset::CreateTime(time) = item_query.offset {
         Some(time)
     } else {
@@ -499,5 +504,78 @@ mod tests {
         .unwrap();
         assert_eq!(result.first().unwrap().content, "task3");
         assert_eq!(result.last().unwrap().content, "task2");
+    }
+
+    #[test]
+    fn test_query_content_like() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Insert tasks with different content patterns
+        insert_task(&conn, "work", "meeting with client", "today");
+        insert_task(&conn, "work", "team meeting", "today");
+        insert_task(&conn, "work", "review code", "today");
+        insert_task(&conn, "personal", "doctor appointment", "tomorrow");
+        insert_task(&conn, "personal", "meeting friends", "tomorrow");
+
+        // Insert records with different content patterns
+        insert_record(&conn, "work", "attended meeting", "yesterday");
+        insert_record(&conn, "work", "completed review", "yesterday");
+        insert_record(&conn, "personal", "had appointment", "yesterday");
+
+        // Test searching for "meeting" - should find 4 items
+        let meeting_items =
+            query_items(&conn, &ItemQuery::new().with_content_like("meeting")).unwrap();
+        assert_eq!(meeting_items.len(), 4);
+        for item in &meeting_items {
+            assert!(item.content.contains("meeting"));
+        }
+
+        // Test searching for "appointment" - should find 2 items
+        let appointment_items =
+            query_items(&conn, &ItemQuery::new().with_content_like("appointment")).unwrap();
+        assert_eq!(appointment_items.len(), 2);
+        for item in &appointment_items {
+            assert!(item.content.contains("appointment"));
+        }
+
+        // Test combining content_like with other filters
+        let work_meeting_items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_content_like("meeting")
+                .with_category("work"),
+        )
+        .unwrap();
+        assert_eq!(work_meeting_items.len(), 3);
+        for item in &work_meeting_items {
+            assert!(item.content.contains("meeting"));
+            assert_eq!(item.category, "work");
+        }
+
+        // Test combining content_like with action filter
+        let task_meeting_items = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_content_like("meeting")
+                .with_action("task"),
+        )
+        .unwrap();
+        assert_eq!(task_meeting_items.len(), 3);
+        for item in &task_meeting_items {
+            assert!(item.content.contains("meeting"));
+            assert_eq!(item.action, "task");
+        }
+
+        // Test search that should return no results
+        let no_results =
+            query_items(&conn, &ItemQuery::new().with_content_like("nonexistent")).unwrap();
+        assert_eq!(no_results.len(), 0);
+
+        // Test partial word matching
+        let review_items = query_items(&conn, &ItemQuery::new().with_content_like("rev")).unwrap();
+        assert_eq!(review_items.len(), 2);
+        for item in &review_items {
+            assert!(item.content.contains("review"));
+        }
     }
 }

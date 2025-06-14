@@ -132,7 +132,10 @@ pub struct ListTaskCommand {
     pub limit: usize,
     /// next page if the previous list command reached limit
     #[arg(short, long, default_value_t = false)]
-    pub next_page: bool
+    pub next_page: bool,
+    /// search for tasks containing this text in their content
+    #[arg(long)]
+    pub search: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -157,7 +160,10 @@ pub struct ListRecordCommand {
     pub ending_time: Option<String>,
     /// next page if the previous list command reached limit
     #[arg(short, long, default_value_t = false)]
-    pub next_page: bool
+    pub next_page: bool,
+    /// search for records containing this text in their content
+    #[arg(long)]
+    pub search: Option<String>,
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {

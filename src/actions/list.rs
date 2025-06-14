@@ -87,6 +87,9 @@ fn query_records(conn: &Connection, cmd: &ListRecordCommand) -> Result<Vec<Item>
     if let Some(cat) = &cmd.category {
         record_query = record_query.with_category(cat);
     }
+    if let Some(search_term) = &cmd.search {
+        record_query = record_query.with_content_like(search_term);
+    }
     if let Some(days) = cmd.days {
         let cutoff_timestamp = timestr::days_before_to_unix_epoch(days);
         record_query = record_query.with_create_time_min(cutoff_timestamp);
@@ -129,6 +132,9 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
     }
     if let Some(cat) = &cmd.category {
         task_query = task_query.with_category(cat);
+    }
+    if let Some(search_term) = &cmd.search {
+        task_query = task_query.with_content_like(search_term);
     }
 
     match cmd.status {
@@ -188,6 +194,100 @@ mod tests {
         update_status,
     };
 
+    impl ListRecordCommand {
+        fn default_test() -> Self {
+            ListRecordCommand {
+                category: None,
+                days: None,
+                limit: 100,
+                starting_time: None,
+                ending_time: None,
+                next_page: false,
+                search: None,
+            }
+        }
+
+        fn with_category(mut self, category: &str) -> Self {
+            self.category = Some(category.to_string());
+            self
+        }
+
+        fn with_days(mut self, days: usize) -> Self {
+            self.days = Some(days);
+            self
+        }
+
+        fn with_starting_time(mut self, starting_time: &str) -> Self {
+            self.starting_time = Some(starting_time.to_string());
+            self
+        }
+
+        fn with_ending_time(mut self, ending_time: &str) -> Self {
+            self.ending_time = Some(ending_time.to_string());
+            self
+        }
+
+        fn with_search(mut self, search: &str) -> Self {
+            self.search = Some(search.to_string());
+            self
+        }
+
+        fn with_limit(mut self, limit: usize) -> Self {
+            self.limit = limit;
+            self
+        }
+
+        fn with_next_page(mut self) -> Self {
+            self.next_page = true;
+            self
+        }
+    }
+
+    impl ListTaskCommand {
+        fn default_test() -> Self {
+            ListTaskCommand {
+                timestr: None,
+                category: None,
+                days: None,
+                status: 0,
+                overdue: false,
+                limit: 100,
+                next_page: false,
+                search: None,
+            }
+        }
+
+        fn with_category(mut self, category: &str) -> Self {
+            self.category = Some(category.to_string());
+            self
+        }
+
+        fn with_status(mut self, status: u8) -> Self {
+            self.status = status;
+            self
+        }
+
+        fn with_overdue(mut self, overdue: bool) -> Self {
+            self.overdue = overdue;
+            self
+        }
+
+        fn with_limit(mut self, limit: usize) -> Self {
+            self.limit = limit;
+            self
+        }
+
+        fn with_next_page(mut self) -> Self {
+            self.next_page = true;
+            self
+        }
+
+        fn with_search(mut self, search: &str) -> Self {
+            self.search = Some(search.to_string());
+            self
+        }
+    }
+
     #[test]
     fn test_query_records() {
         let (conn, _temp_file) = get_test_conn();
@@ -195,38 +295,15 @@ mod tests {
         insert_record(&conn, "feeding", "110ML", "yesterday 5PM");
         insert_record(&conn, "feeding", "100ML", "yesterday 9PM");
         insert_record(&conn, "FTP", "256W", "yesterday 7PM");
-        let listfeeding = ListRecordCommand {
-            category: Some("feeding".to_string()),
-            days: None,
-            limit: 100,
-            starting_time: None,
-            ending_time: None,
-            next_page: false,
-        };
-        let list_all = ListRecordCommand {
-            category: None,
-            days: Some(2),
-            limit: 100,
-            starting_time: None,
-            ending_time: None,
-            next_page: false,
-        };
-        let list_timeframe = ListRecordCommand {
-            category: None,
-            days: None,
-            limit: 100,
-            starting_time: Some("yesterday 4PM".to_string()),
-            ending_time: Some("yesterday 8PM".to_string()),
-            next_page: false,
-        };
-        let list_timeframe_start_only = ListRecordCommand {
-            category: None,
-            days: None,
-            limit: 100,
-            starting_time: Some("yesterday 8PM".to_string()),
-            ending_time: None,
-            next_page: false,
-        };
+
+        let listfeeding = ListRecordCommand::default_test().with_category("feeding");
+        let list_all = ListRecordCommand::default_test().with_days(2);
+        let list_timeframe = ListRecordCommand::default_test()
+            .with_starting_time("yesterday 4PM")
+            .with_ending_time("yesterday 8PM");
+        let list_timeframe_start_only =
+            ListRecordCommand::default_test().with_starting_time("yesterday 8PM");
+
         let results = query_records(&conn, &listfeeding).unwrap();
         assert_eq!(results.len(), 3);
         let results = query_records(&conn, &list_all).unwrap();
@@ -244,21 +321,15 @@ mod tests {
         insert_task(&conn, "life", "third_due", "tomorrow");
         insert_task(&conn, "fun", "second_due", "today");
         insert_task(&conn, "fun", "first_due", "yesterday");
-        let mut list_tasks_default = ListTaskCommand {
-            timestr: None,
-            category: None,
-            days: None,
-            status: 0,
-            overdue: false,
-            limit: 100,
-            next_page: false,
-        };
+
+        let list_tasks_default = ListTaskCommand::default_test();
         let results = query_tasks(&conn, &list_tasks_default).unwrap();
         assert_eq!(results.len(), 2);
         assert_eq!(results.first().unwrap().content, "second_due");
         assert_eq!(results.last().unwrap().content, "third_due");
-        list_tasks_default.overdue = true;
-        let results = query_tasks(&conn, &list_tasks_default).unwrap();
+
+        let list_tasks_with_overdue = ListTaskCommand::default_test().with_overdue(true);
+        let results = query_tasks(&conn, &list_tasks_with_overdue).unwrap();
         assert_eq!(results.len(), 3);
         assert_eq!(results.first().unwrap().content, "first_due");
     }
@@ -281,29 +352,26 @@ mod tests {
             );
         }
 
-        let mut list_record = ListRecordCommand {
-            category: Some("test".to_string()),
-            days: None,
-            limit: 11,
-            next_page: false,
-            starting_time: Some("2025/02/21".to_string()),
-            ending_time: Some("2025/02/27".to_string()),
-        };
+        let list_record = ListRecordCommand::default_test()
+            .with_category("test")
+            .with_limit(11)
+            .with_starting_time("2025/02/21")
+            .with_ending_time("2025/02/27");
 
         let results = query_records(&conn, &list_record).unwrap();
         cache::clear(&conn).unwrap();
         cache::store_with_next(&conn, &results).unwrap();
         assert_eq!(results.len(), 11);
         assert!(results.iter().all(|i| i.content.contains("A")));
-        list_record.next_page = true;
 
-        let results = query_records(&conn, &list_record).unwrap();
+        let list_record_next = list_record.with_next_page();
+        let results = query_records(&conn, &list_record_next).unwrap();
         cache::clear(&conn).unwrap();
         cache::store_with_next(&conn, &results).unwrap();
         assert_eq!(results.len(), 11);
         assert!(results.iter().all(|i| i.content.contains("B")));
 
-        let results = query_records(&conn, &list_record).unwrap();
+        let results = query_records(&conn, &list_record_next).unwrap();
         cache::clear(&conn).unwrap();
         cache::store(&conn, &results).unwrap();
         assert_eq!(results.len(), 0);
@@ -327,36 +395,33 @@ mod tests {
             );
         }
 
-        let mut list_task = ListTaskCommand {
-            timestr: None,
-            category: Some("test".to_string()),
-            days: None,
-            status: 0,
-            overdue: false,
-            limit: 10,
-            next_page: false,
-        };
+        let list_task = ListTaskCommand::default_test()
+            .with_category("test")
+            .with_limit(10);
 
         let results = query_tasks(&conn, &list_task).unwrap();
         cache::store_with_next(&conn, &results).unwrap();
         assert_eq!(results.len(), 10);
         assert!(results.iter().all(|i| i.content.contains("AM")));
-        list_task.next_page = true;
-        let results = query_tasks(&conn, &list_task).unwrap();
+
+        let list_task_next = list_task.with_next_page();
+        let results = query_tasks(&conn, &list_task_next).unwrap();
 
         cache::clear(&conn).unwrap();
         cache::store_with_next(&conn, &results).unwrap();
         assert_eq!(results.len(), 10);
         assert_eq!(results.first().unwrap().content, "index 11AM");
         assert_eq!(results.last().unwrap().content, "index 9PM");
-        let results = query_tasks(&conn, &list_task).unwrap();
+
+        let results = query_tasks(&conn, &list_task_next).unwrap();
 
         cache::clear(&conn).unwrap();
         cache::store(&conn, &results).unwrap();
         assert_eq!(results.len(), 2);
         assert_eq!(results.first().unwrap().content, "index 10PM");
         assert_eq!(results.last().unwrap().content, "index 11PM");
-        let results = query_tasks(&conn, &list_task);
+
+        let results = query_tasks(&conn, &list_task_next);
         assert_eq!(results.unwrap_err(), "No next page available".to_string());
     }
 
@@ -376,24 +441,10 @@ mod tests {
         for i in 1..=4 {
             insert_task(&conn, "ongoing", &format!("ongoing-task-{}", i), "today");
         }
-        let list_open = ListTaskCommand {
-            timestr: None,
-            category: None,
-            days: None,
-            limit: 100,
-            status: 254,
-            overdue: false,
-            next_page: false,
-        };
-        let list_closed = ListTaskCommand {
-            timestr: None,
-            category: None,
-            days: None,
-            limit: 100,
-            status: 253,
-            overdue: false,
-            next_page: false,
-        };
+
+        let list_open = ListTaskCommand::default_test().with_status(254);
+        let list_closed = ListTaskCommand::default_test().with_status(253);
+
         let results = query_tasks(&conn, &list_open).expect("Unable to query");
         assert_eq!(results.len(), 6);
         assert!(results
@@ -404,5 +455,93 @@ mod tests {
         assert!(results
             .iter()
             .all(|t| t.category == "done" || t.category == "cancelled"));
+    }
+
+    #[test]
+    fn test_search_functionality() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Insert records with different content patterns
+        insert_record(&conn, "feeding", "100ML bottle feed", "yesterday 2PM");
+        insert_record(&conn, "feeding", "breast feeding session", "yesterday 5PM");
+        insert_record(&conn, "feeding", "solid food banana", "yesterday 9PM");
+        insert_record(&conn, "sleep", "bottle cleaning", "yesterday 7PM");
+        insert_record(&conn, "diaper", "wet diaper change", "yesterday 3PM");
+
+        // Insert tasks with different content patterns
+        insert_task(&conn, "work", "team meeting scheduled", "today");
+        insert_task(&conn, "work", "client meeting prep", "tomorrow");
+        insert_task(&conn, "personal", "doctor appointment", "today");
+        insert_task(&conn, "personal", "meeting friends", "tomorrow");
+        insert_task(&conn, "home", "bottle sterilization", "today");
+
+        // Test record search for "bottle" - should find 2 records
+        let search_bottle_records = ListRecordCommand::default_test()
+            .with_days(2)
+            .with_search("bottle");
+        let results = query_records(&conn, &search_bottle_records).unwrap();
+        assert_eq!(results.len(), 2);
+        for record in &results {
+            assert!(record.content.contains("bottle"));
+        }
+
+        // Test record search for "feeding" - should find 1 record
+        let search_feeding_records = ListRecordCommand::default_test()
+            .with_days(2)
+            .with_search("feeding");
+        let results = query_records(&conn, &search_feeding_records).unwrap();
+        assert_eq!(results.len(), 1);
+        for record in &results {
+            assert!(record.content.contains("feeding"));
+        }
+
+        // Test task search for "meeting" - should find 3 tasks
+        let search_meeting_tasks = ListTaskCommand::default_test()
+            .with_overdue(true)
+            .with_search("meeting");
+        let results = query_tasks(&conn, &search_meeting_tasks).unwrap();
+        assert_eq!(results.len(), 3);
+        for task in &results {
+            assert!(task.content.contains("meeting"));
+        }
+
+        // Test combined search and category filter for records
+        let search_feeding_category = ListRecordCommand::default_test()
+            .with_category("feeding")
+            .with_days(2)
+            .with_search("feed");
+        let results = query_records(&conn, &search_feeding_category).unwrap();
+        assert_eq!(results.len(), 2);
+        for record in &results {
+            assert!(record.content.contains("feed"));
+            assert_eq!(record.category, "feeding");
+        }
+
+        // Test combined search and category filter for tasks
+        let search_work_meeting = ListTaskCommand::default_test()
+            .with_category("work")
+            .with_overdue(true)
+            .with_search("meeting");
+        let results = query_tasks(&conn, &search_work_meeting).unwrap();
+        assert_eq!(results.len(), 2);
+        for task in &results {
+            assert!(task.content.contains("meeting"));
+            assert_eq!(task.category, "work");
+        }
+
+        // Test search that returns no results
+        let search_nonexistent = ListRecordCommand::default_test()
+            .with_days(2)
+            .with_search("nonexistent");
+        let results = query_records(&conn, &search_nonexistent).unwrap();
+        assert_eq!(results.len(), 0);
+
+        // Test partial word matching
+        let search_partial = ListRecordCommand::default_test()
+            .with_days(2)
+            .with_search("banan");
+        let results = query_records(&conn, &search_partial).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].content.contains("banana"));
     }
 }
