@@ -20,8 +20,10 @@ use crate::{
         crud::{
             delete_item,
             get_item,
+            insert_item,
             update_item,
         },
+        item::Item,
     },
 };
 
@@ -34,6 +36,17 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     if item.action == "record" {
         return Err("Cannot complete a record".to_string());
     }
+
+    // Create completion record before updating task status
+    let completion_content = format!("Completed Task: {}", item.content);
+    let completion_record = Item::new(
+        "record".to_string(),
+        item.category.clone(),
+        completion_content,
+    );
+    insert_item(conn, &completion_record)
+        .map_err(|e| format!("Failed to create completion record: {:?}", e))?;
+
     item.status = status;
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
     display::print_bold("Completed Task:");
@@ -156,6 +169,12 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 1);
 
+        // Check that a completion record was created
+        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].content, "Completed Task: finish report");
+        assert_eq!(records[0].category, "work");
+
         // update again
         let done_cmd = DoneCommand {
             index: 1,
@@ -164,6 +183,10 @@ mod tests {
         handle_donecmd(&conn, &done_cmd).unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 2);
+
+        // Check that another completion record was created
+        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        assert_eq!(records.len(), 2);
     }
 
     #[test]
