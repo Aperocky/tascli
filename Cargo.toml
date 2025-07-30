@@ -1,6 +1,6 @@
 [package]
 name = "tascli"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 description = "A simple CLI tool for tracking tasks and records from terminal"
 license = "MIT"
@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
-rusqlite = { version = "0.36", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 chrono = "0.4"
 terminal_size = "0.4"
 unicode-width = "0.2.0"

@@ -1,5 +1,11 @@
 # Changelog
 
+### v0.8.0
+
+- ✨ Completed task with `tascli done` will automatically populate a record of completion
+- ✨ Add `--comment` flag to also add a comment on the task completion
+- 📦 Update dependency versions for sqlite
+
 ### v0.7.0
 
 - ✨ Add `--search` flag to list action to search content by text

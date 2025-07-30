@@ -67,6 +67,9 @@ pub struct DoneCommand {
     /// optional status, default to done.
     #[arg(short, long, value_parser = parse_status, default_value_t = 1)]
     pub status: u8,
+    /// add comment to task content and completion record
+    #[arg(short, long)]
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Args)]

@@ -37,7 +37,13 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
         return Err("Cannot complete a record".to_string());
     }
 
-    // Create completion record before updating task status
+    // Add comment to task if provided
+    if let Some(comment) = &cmd.comment {
+        item.content.push('\n');
+        item.content.push_str(comment);
+    }
+
+    // Create completion record using updated task content
     let completion_content = format!("Completed Task: {}", item.content);
     let completion_record = Item::new(
         "record".to_string(),
@@ -163,6 +169,7 @@ mod tests {
         let done_cmd = DoneCommand {
             index: 1,
             status: 1,
+            comment: None,
         };
         handle_donecmd(&conn, &done_cmd).unwrap();
         let item_id = cache::read(&conn, 1).unwrap().unwrap();
@@ -179,6 +186,7 @@ mod tests {
         let done_cmd = DoneCommand {
             index: 1,
             status: 2,
+            comment: None,
         };
         handle_donecmd(&conn, &done_cmd).unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
@@ -187,6 +195,37 @@ mod tests {
         // Check that another completion record was created
         let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
         assert_eq!(records.len(), 2);
+    }
+
+    #[test]
+    fn test_handle_donecmd_with_comment() {
+        let (conn, _temp_file) = get_test_conn();
+        insert_task(&conn, "work", "finish report", "tomorrow");
+        let items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        cache::store(&conn, &items).unwrap();
+
+        let done_cmd = DoneCommand {
+            index: 1,
+            status: 1,
+            comment: Some("Added extra analysis section".to_string()),
+        };
+        handle_donecmd(&conn, &done_cmd).unwrap();
+        let item_id = cache::read(&conn, 1).unwrap().unwrap();
+        let updated_item = get_item(&conn, item_id).unwrap();
+
+        assert_eq!(
+            updated_item.content,
+            "finish report\nAdded extra analysis section"
+        );
+        assert_eq!(updated_item.status, 1);
+
+        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(
+            records[0].content,
+            "Completed Task: finish report\nAdded extra analysis section"
+        );
+        assert_eq!(records[0].category, "work");
     }
 
     #[test]
