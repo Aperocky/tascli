@@ -7,6 +7,7 @@ use crate::{
         parser::{
             ListRecordCommand,
             ListTaskCommand,
+            ShowContentCommand,
         },
         timestr,
     },
@@ -79,6 +80,21 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
 
     display::print_bold("Tasks List:");
     display::print_items(&tasks, false, true);
+    Ok(())
+}
+
+pub fn handle_showcontent(conn: &Connection, cmd: ShowContentCommand) -> Result<(), String> {
+    if !cache::validate_cache(conn).map_err(|e| e.to_string())? {
+        return Err("No valid cache found. Please run a list command first.".to_string());
+    }
+
+    let item_id = match cache::read(conn, cmd.index as i64).map_err(|e| e.to_string())? {
+        Some(id) => id,
+        None => return Err(format!("Index {} not found in cache. Use a valid index from the previous list command.", cmd.index)),
+    };
+
+    let item = get_item(conn, item_id).map_err(|e| e.to_string())?;
+    println!("{}", item.content);
     Ok(())
 }
 

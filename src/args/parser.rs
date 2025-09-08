@@ -108,6 +108,10 @@ pub enum ListCommand {
     Task(ListTaskCommand),
     /// list records
     Record(ListRecordCommand),
+    /// Show specific content from previous list command by index
+    /// This allow the content to be displayed in non-table format
+    /// Better for copy paste operations.
+    Show(ShowContentCommand),
 }
 
 #[derive(Debug, Args)]
@@ -167,6 +171,13 @@ pub struct ListRecordCommand {
     /// search for records containing this text in their content
     #[arg(long)]
     pub search: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ShowContentCommand {
+    /// index from previous list command
+    #[arg(value_parser = validate_index)]
+    pub index: usize,
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {

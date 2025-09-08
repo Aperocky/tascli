@@ -1,5 +1,9 @@
 # Changelog
 
+### v0.9.0
+
+- ✨ Added `tascli list show $index` command to simplify copy paste operations
+
 ### v0.8.0
 
 - ✨ Completed task with `tascli done` will automatically populate a record of completion

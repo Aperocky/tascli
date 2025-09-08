@@ -23,6 +23,7 @@ pub fn handle_commands(conn: &Connection, args: CliArgs) -> Result<(), String> {
         Action::List(list_cmd) => match list_cmd {
             ListCommand::Task(cmd) => list::handle_listtasks(conn, cmd),
             ListCommand::Record(cmd) => list::handle_listrecords(conn, cmd),
+            ListCommand::Show(cmd) => list::handle_showcontent(conn, cmd),
         },
     }
 }
