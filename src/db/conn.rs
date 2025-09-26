@@ -4,12 +4,12 @@ use crate::config::get_data_path;
 
 // Going forward, all schema changes require toggling
 // this DB_VERSION to a higher number.
-const DB_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 1;
 
 pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     let current_version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
-    if current_version == DB_VERSION {
+    if current_version == SCHEMA_VERSION {
         return Ok(());
     }
 
@@ -57,7 +57,7 @@ pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
         [],
     )?;
 
-    conn.execute("PRAGMA user_version = 1", [])?;
+    conn.execute(&format!("PRAGMA user_version = {SCHEMA_VERSION}"), [])?;
 
     Ok(())
 }
@@ -109,5 +109,47 @@ mod tests {
             "Second initialization failed: {:?}",
             second_result.err()
         );
+    }
+
+    #[test]
+    fn test_init_table_version_logic() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Manaually drop table and verify with schema version the same
+        // init_table DOES NOT recreate it.
+        conn.execute("DROP TABLE cache", []).unwrap();
+        let second_result = init_table(&conn);
+        assert!(second_result.is_ok());
+
+        let cache_exists = conn.query_row(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='cache'",
+            [],
+            |row: &Row| row.get::<_, String>(0),
+        );
+        assert!(
+            cache_exists.is_err(),
+            "Cache table should NOT exist - proves early return works"
+        );
+
+        // Manually set schema version to a lower number,
+        // init_table should then run.
+        conn.execute("PRAGMA user_version = 0", []).unwrap();
+        let third_result = init_table(&conn);
+        assert!(third_result.is_ok());
+
+        let cache_exists_after_update = conn.query_row(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='cache'",
+            [],
+            |row: &Row| row.get::<_, String>(0),
+        );
+        assert!(
+            cache_exists_after_update.is_ok(),
+            "Cache table should exist after version reset"
+        );
+
+        let final_version = conn
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0))
+            .unwrap();
+        assert_eq!(SCHEMA_VERSION, final_version);
     }
 }
