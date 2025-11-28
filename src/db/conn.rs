@@ -4,7 +4,7 @@ use crate::config::get_data_path;
 
 // Going forward, all schema changes require toggling
 // this DB_VERSION to a higher number.
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     let current_version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -13,6 +13,13 @@ pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
         return Ok(());
     }
 
+    // Single polymorphic table
+    // Supports task, record, recurring_task, recurring_task_record
+    // distinguished via field "action"
+    // common fields: id; action; category; content; create_time; modify_time; status;
+    // target_time is specific for type task
+    // cron_schedule; human_schedule is specific for type recurring_task
+    // recurring_task_id; good_until is for type recurring task record
     conn.execute(
         "CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,10 +29,16 @@ pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
             create_time INTEGER NOT NULL,
             target_time INTEGER,
             modify_time INTEGER,
-            status INTEGER DEFAULT 0
+            status INTEGER DEFAULT 0,
+            cron_schedule TEXT,
+            human_schedule TEXT,
+            recurring_task_id INTEGER,
+            good_until INTEGER
         )",
         [],
     )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_action ON items(action)", [])?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_create_time ON items(create_time)",
@@ -54,6 +67,19 @@ pub fn init_table(conn: &Connection) -> Result<(), rusqlite::Error> {
             key INTEGER PRIMARY KEY,
             value INTEGER NOT NULL
         )",
+        [],
+    )?;
+
+    // Migrate from version 1 to 2 - add columns for recurring task support
+    if current_version < 2 && current_version > 0 {
+        conn.execute("ALTER TABLE items ADD COLUMN cron_schedule TEXT", [])?;
+        conn.execute("ALTER TABLE items ADD COLUMN human_schedule TEXT", [])?;
+        conn.execute("ALTER TABLE items ADD COLUMN recurring_task_id INTEGER", [])?;
+        conn.execute("ALTER TABLE items ADD COLUMN good_until INTEGER", [])?;
+    }
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_recurring_task_id_good_until ON items(recurring_task_id, good_until)",
         [],
     )?;
 
@@ -101,7 +127,7 @@ mod tests {
         );
         assert!(cache_table_exists.is_ok(), "Table 'cache' does not exist");
         let pragma_version = conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0));
-        assert_eq!(1, pragma_version.unwrap());
+        assert_eq!(SCHEMA_VERSION, pragma_version.unwrap());
 
         let second_result = init_table(&conn);
         assert!(
