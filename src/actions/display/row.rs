@@ -17,30 +17,45 @@ pub struct DisplayRow {
 
 impl DisplayRow {
     pub fn from_task(index: String, task: &Item) -> Self {
-        let mut target_timestr = timestamp_to_display_string(task.target_time.unwrap(), false);
-        let category = task.category.clone();
+        let mut category = task.category.clone();
         let content = task.content.clone();
+
+        let mut timestr = if task.action == "recurring_task" {
+            category.push_str(" (Recurring)");
+            task.human_schedule
+                .clone()
+                .unwrap_or_else(|| "No schedule".to_string())
+        } else {
+            timestamp_to_display_string(task.target_time.unwrap(), false)
+        };
+
+        // Add status indicator for both types
         if task.status != 0 {
             let status_str = translate_status(task.status);
-            target_timestr.push_str(&format!(" ({})", status_str));
+            timestr.push_str(&format!(" ({})", status_str));
         }
+
         DisplayRow {
             index,
             category,
             content,
-            timestr: target_timestr,
+            timestr,
         }
     }
 
     pub fn from_record(index: String, record: &Item) -> Self {
-        let create_timestr = timestamp_to_display_string(record.create_time, true);
-        let category = record.category.clone();
+        let timestr = timestamp_to_display_string(record.create_time, true);
+        let mut category = record.category.clone();
         let content = record.content.clone();
+        if record.action == "recurring_task_record" {
+            category.push_str(" (Recurring)");
+        }
+
         DisplayRow {
             index,
             category,
             content,
-            timestr: create_timestr,
+            timestr,
         }
     }
 }
