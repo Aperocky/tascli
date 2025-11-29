@@ -6,6 +6,7 @@ use chrono::{
     NaiveDateTime,
     NaiveTime,
     TimeZone,
+    Timelike,
     Weekday,
 };
 
@@ -174,6 +175,139 @@ fn next_weekday(from_date: NaiveDate, weekday: Weekday) -> NaiveDate {
     }
 }
 
+// Helper: Get time from parts starting at index, or default to 11:59PM
+fn get_time_or_default(parts: &[&str], start_idx: usize) -> Result<String, String> {
+    if parts.len() > start_idx {
+        let time_str = parts[start_idx..].join(" ");
+        let time = parse_time_portion(&time_str)
+            .map_err(|_| format!("Couldn't parse '{}' as a time for cron", time_str))?;
+        Ok(format!("{} {}", time.minute(), time.hour()))
+    } else {
+        Ok("59 23".to_string())
+    }
+}
+
+// Parse a human readable schedule into cron.
+pub fn parse_recurring_timestr(s: &str) -> Result<String, String> {
+    let s = s.trim();
+    let parts: Vec<&str> = s.split_whitespace().collect();
+
+    if parts.is_empty() {
+        return Err(String::from("Empty recurring time string"));
+    }
+
+    match parts[0].to_lowercase().as_str() {
+        "daily" => {
+            let time = get_time_or_default(&parts, 1)?;
+            Ok(format!("{} * * *", time))
+        }
+        "weekly" => {
+            if parts.len() == 1 {
+                return Ok(String::from("59 23 * * 0"));
+            }
+
+            // Check for day range like "Monday-Friday"
+            let days = if parts[1].contains('-') {
+                parse_day_range(parts[1])?
+            } else {
+                parse_weekday(parts[1])?.to_string()
+            };
+
+            let time = get_time_or_default(&parts, 2)?;
+            Ok(format!("{} * * {}", time, days))
+        }
+        "monthly" => {
+            if parts.len() == 1 {
+                return Ok(String::from("59 23 1 * *"));
+            }
+
+            let day = parse_ordinal_day(parts[1])
+                .ok_or_else(|| format!("Invalid day format in '{}'", s))?;
+            let time = get_time_or_default(&parts, 2)?;
+            Ok(format!("{} {} * *", time, day))
+        }
+        "yearly" => {
+            if parts.len() == 1 {
+                return Ok(String::from("59 23 31 12 *"));
+            }
+
+            let (month, day) = parse_month_day(parts[1])?;
+            let time = get_time_or_default(&parts, 2)?;
+            Ok(format!("{} {} {} *", time, day, month))
+        }
+        _ => Err(format!("Unrecognized recurring time format: '{}'", s)),
+    }
+}
+
+// Parse weekday names to cron weekday numbers (0=Sunday, 1=Monday, etc.)
+fn parse_weekday(s: &str) -> Result<u8, String> {
+    match s.to_lowercase().as_str() {
+        "sunday" | "sun" => Ok(0),
+        "monday" | "mon" => Ok(1),
+        "tuesday" | "tue" | "tues" => Ok(2),
+        "wednesday" | "wed" | "weds" => Ok(3),
+        "thursday" | "thu" | "thur" | "thurs" => Ok(4),
+        "friday" | "fri" => Ok(5),
+        "saturday" | "sat" => Ok(6),
+        _ => Err(format!("Invalid weekday: '{}'", s)),
+    }
+}
+
+// Parse day ranges like "Monday-Friday" into cron format "1-5"
+fn parse_day_range(s: &str) -> Result<String, String> {
+    let parts: Vec<&str> = s.split('-').collect();
+    if parts.len() != 2 {
+        return Err(format!("Invalid day range format: '{}'", s));
+    }
+
+    let start_day = parse_weekday(parts[0])?;
+    let end_day = parse_weekday(parts[1])?;
+
+    if start_day > end_day {
+        return Err(format!(
+            "Day range must go forward (e.g., Mon-Fri), not wrap around: '{}'",
+            s
+        ));
+    }
+
+    Ok(format!("{}-{}", start_day, end_day))
+}
+
+// Parse ordinal day expressions like "3rd", "15th", etc.
+fn parse_ordinal_day(s: &str) -> Option<u8> {
+    let s = s.to_lowercase();
+
+    // Handle ordinal suffixes
+    let day_str =
+        if s.ends_with("st") || s.ends_with("nd") || s.ends_with("rd") || s.ends_with("th") {
+            &s[0..s.len() - 2]
+        } else {
+            &s
+        };
+
+    day_str.parse::<u8>().ok().filter(|&d| d >= 1 && d <= 31)
+}
+
+// Parse month/day patterns like "2/14"
+fn parse_month_day(s: &str) -> Result<(u32, u32), String> {
+    let parts: Vec<&str> = s.split('/').collect();
+
+    let (month, day) = match parts.as_slice() {
+        [m, d] => {
+            let month = m.parse::<u32>().map_err(|_| format!("Invalid month in '{}'", s))?;
+            let day = d.parse::<u32>().map_err(|_| format!("Invalid day in '{}'", s))?;
+            (month, day)
+        }
+        _ => return Err(format!("Invalid month/day format: '{}'", s)),
+    };
+
+    // Use NaiveDate to validate the date is real (e.g., rejects Feb 30)
+    NaiveDate::from_ymd_opt(2024, month, day)
+        .ok_or_else(|| format!("Invalid date: {}/{}", month, day))?;
+
+    Ok((month, day))
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
@@ -261,5 +395,58 @@ mod tests {
             Local::now().offset(),
             unix_epoch
         );
+    }
+
+    #[test]
+    fn test_recurring_valid_inputs() {
+        let test_cases = [
+            // Daily
+            ("Daily", "59 23 * * *"),
+            ("Daily 5PM", "0 17 * * *"),
+            ("Daily 9:30AM", "30 9 * * *"),
+            // Weekly
+            ("Weekly", "59 23 * * 0"),
+            ("Weekly Monday", "59 23 * * 1"),
+            ("Weekly Monday 5PM", "0 17 * * 1"),
+            ("Weekly Monday-Friday", "59 23 * * 1-5"),
+            ("Weekly Monday-Friday 3PM", "0 15 * * 1-5"),
+            // Monthly
+            ("Monthly", "59 23 1 * *"),
+            ("Monthly 3rd", "59 23 3 * *"),
+            ("Monthly 15th 9AM", "0 9 15 * *"),
+            // Yearly
+            ("Yearly", "59 23 31 12 *"),
+            ("Yearly 2/14", "59 23 14 2 *"),
+            ("Yearly 7/4 12PM", "0 12 4 7 *"),
+            ("Yearly 12/25", "59 23 25 12 *"),
+        ];
+
+        for (input, expected) in test_cases {
+            assert_eq!(
+                parse_recurring_timestr(input).unwrap(),
+                expected,
+                "Failed for input: '{}'",
+                input
+            );
+        }
+    }
+
+    #[test]
+    fn test_recurring_invalid_inputs() {
+        assert!(parse_recurring_timestr("").is_err());
+        assert!(parse_recurring_timestr("Invalid").is_err());
+        assert!(parse_recurring_timestr("Monthly 32nd").is_err());
+        assert!(parse_recurring_timestr("Weekly InvalidDay").is_err());
+        assert!(parse_recurring_timestr("13/45").is_err());
+
+        // Invalid dates should be rejected (Feb 30, June 31, etc.)
+        assert!(parse_recurring_timestr("Yearly 2/30").is_err());
+        assert!(parse_recurring_timestr("Yearly 6/31").is_err());
+
+        // Standalone month/day patterns should be rejected (conflict with one-time tasks)
+        assert!(parse_recurring_timestr("2/14").is_err());
+        assert!(parse_recurring_timestr("12/25").is_err());
+        assert!(parse_recurring_timestr("February 14th").is_err());
+        assert!(parse_recurring_timestr("July 4th").is_err());
     }
 }
