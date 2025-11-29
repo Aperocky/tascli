@@ -20,14 +20,18 @@ const VALID_ORDER_COLUMNS: &[&str] = &["id", "create_time", "target_time"];
 
 pub fn insert_item(conn: &Connection, item: &Item) -> Result<i64> {
     conn.execute(
-        "INSERT INTO items (action, category, content, create_time, target_time) 
-         VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO items (action, category, content, create_time, target_time, cron_schedule, human_schedule, recurring_task_id, good_until)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             item.action,
             item.category,
             item.content,
             item.create_time,
-            item.target_time
+            item.target_time,
+            item.cron_schedule,
+            item.human_schedule,
+            item.recurring_task_id,
+            item.good_until
         ],
     )?;
 
@@ -41,19 +45,27 @@ pub fn update_item(conn: &Connection, item: &Item) -> Result<()> {
         .as_secs() as i64;
 
     conn.execute(
-        "UPDATE items SET 
+        "UPDATE items SET
             category = ?1,
             content = ?2,
             target_time = ?3,
             modify_time = ?4,
-            status = ?5
-        WHERE id = ?6",
+            status = ?5,
+            cron_schedule = ?6,
+            human_schedule = ?7,
+            recurring_task_id = ?8,
+            good_until = ?9
+        WHERE id = ?10",
         params![
             item.category,
             item.content,
             item.target_time,
             now,
             item.status,
+            item.cron_schedule,
+            item.human_schedule,
+            item.recurring_task_id,
+            item.good_until,
             item.id
         ],
     )?;
@@ -129,6 +141,21 @@ pub fn query_items(
         params.push(tt_max.to_string());
     }
 
+    if let Some(gu_min) = item_query.good_until_min {
+        conditions.push("good_until > ?".to_string());
+        params.push(gu_min.to_string());
+    }
+
+    if let Some(gu_max) = item_query.good_until_max {
+        conditions.push("good_until <= ?".to_string());
+        params.push(gu_max.to_string());
+    }
+
+    if let Some(rt_id) = item_query.recurring_task_id {
+        conditions.push("recurring_task_id = ?".to_string());
+        params.push(rt_id.to_string());
+    }
+
     if let Some(cc) = &item_query.statuses {
         let status_list = cc
             .iter()
@@ -188,6 +215,8 @@ mod tests {
         tests::{
             get_test_conn,
             insert_record,
+            insert_recurring_record,
+            insert_recurring_task,
             insert_task,
             update_status,
         },
@@ -240,7 +269,31 @@ mod tests {
         let result = update_item(&conn, &item_db);
         assert!(result.is_ok(), "Cannot update item: {:?}", result.err());
         let updated_item = get_item(&conn, item_id).unwrap();
-        assert_eq!(updated_item.status, 1)
+        assert_eq!(updated_item.status, 1);
+
+        // Test updating a recurring task
+        let recurring_id =
+            insert_recurring_task(&conn, "work", "Weekly standup", "Weekly Monday 9AM");
+        let mut recurring_item = get_item(&conn, recurring_id).unwrap();
+
+        // Store original recurring fields
+        let original_cron = recurring_item.cron_schedule.clone();
+        let original_human = recurring_item.human_schedule.clone();
+
+        // Update category
+        recurring_item.category = "meetings".to_string();
+        let result = update_item(&conn, &recurring_item);
+        assert!(
+            result.is_ok(),
+            "Cannot update recurring item: {:?}",
+            result.err()
+        );
+
+        // Verify category changed but recurring fields stayed the same
+        let updated_recurring = get_item(&conn, recurring_id).unwrap();
+        assert_eq!(updated_recurring.category, "meetings");
+        assert_eq!(updated_recurring.cron_schedule, original_cron);
+        assert_eq!(updated_recurring.human_schedule, original_human);
     }
 
     #[test]
@@ -576,6 +629,88 @@ mod tests {
         assert_eq!(review_items.len(), 2);
         for item in &review_items {
             assert!(item.content.contains("review"));
+        }
+    }
+
+    #[test]
+    fn test_query_recurring_task_fields() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Create recurring tasks and records
+        let task1_id = insert_recurring_task(&conn, "work", "Weekly standup", "Weekly Monday 9AM");
+        insert_recurring_record(&conn, "work", "Standup completed", task1_id, 1000);
+        insert_recurring_record(&conn, "work", "Standup completed", task1_id, 2000);
+        insert_recurring_record(&conn, "work", "Standup completed", task1_id, 3000);
+
+        let task2_id = insert_recurring_task(&conn, "personal", "Daily exercise", "Daily 7AM");
+        insert_recurring_record(&conn, "personal", "Exercise completed", task2_id, 1500);
+
+        // Test querying by recurring_task_id
+        let records_for_task1 = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("recurring_task_record")
+                .with_recurring_task_id(task1_id),
+        )
+        .unwrap();
+        assert_eq!(records_for_task1.len(), 3);
+        for record in &records_for_task1 {
+            assert_eq!(record.recurring_task_id, Some(task1_id));
+        }
+
+        let records_for_task2 = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("recurring_task_record")
+                .with_recurring_task_id(task2_id),
+        )
+        .unwrap();
+        assert_eq!(records_for_task2.len(), 1);
+        assert_eq!(records_for_task2[0].recurring_task_id, Some(task2_id));
+
+        // Test querying by good_until range
+        let records_after_1500 = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("recurring_task_record")
+                .with_good_until_min(1500),
+        )
+        .unwrap();
+        assert_eq!(records_after_1500.len(), 2); // records at 2000 and 3000
+
+        let records_before_2500 = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("recurring_task_record")
+                .with_good_until_max(2500),
+        )
+        .unwrap();
+        assert_eq!(records_before_2500.len(), 3); // records at 1000, 1500, and 2000
+
+        // Test querying by good_until range (min and max)
+        let records_in_range = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("recurring_task_record")
+                .with_good_until_min(1000)
+                .with_good_until_max(2500),
+        )
+        .unwrap();
+        assert_eq!(records_in_range.len(), 2); // records at 1500 and 2000
+
+        // Test combining recurring_task_id with good_until range
+        let specific_records = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_action("recurring_task_record")
+                .with_recurring_task_id(task1_id)
+                .with_good_until_min(1500),
+        )
+        .unwrap();
+        assert_eq!(specific_records.len(), 2); // records at 2000 and 3000 for task1
+        for record in &specific_records {
+            assert_eq!(record.recurring_task_id, Some(task1_id));
+            assert!(record.good_until.unwrap() > 1500);
         }
     }
 }

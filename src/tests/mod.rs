@@ -49,3 +49,35 @@ pub fn update_status(conn: &Connection, rowid: i64, status_code: u8) {
     task.status = status_code;
     update_item(conn, &task).unwrap();
 }
+
+pub fn insert_recurring_task(
+    conn: &Connection,
+    category: &str,
+    content: &str,
+    human_schedule: &str,
+) -> i64 {
+    let cron_schedule = timestr::parse_recurring_timestr(human_schedule).unwrap();
+    let recurring_task = Item::create_recurring_task(
+        category.to_string(),
+        content.to_string(),
+        cron_schedule,
+        human_schedule.to_string(),
+    );
+    insert_item(conn, &recurring_task).unwrap()
+}
+
+pub fn insert_recurring_record(
+    conn: &Connection,
+    category: &str,
+    content: &str,
+    recurring_task_id: i64,
+    good_until: i64,
+) -> i64 {
+    let record = Item::create_recurring_record(
+        category.to_string(),
+        content.to_string(),
+        recurring_task_id,
+        good_until,
+    );
+    insert_item(conn, &record).unwrap()
+}

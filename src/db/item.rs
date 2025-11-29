@@ -16,7 +16,14 @@ pub struct Item {
     #[allow(dead_code)]
     pub modify_time: Option<i64>,
     pub status: u8,
+    pub cron_schedule: Option<String>,
+    pub human_schedule: Option<String>,
+    pub recurring_task_id: Option<i64>,
+    pub good_until: Option<i64>,
 }
+
+const RECURRING_TASK: &str = "recurring_task";
+const RECURRING_TASK_RECORD: &str = "recurring_task_record";
 
 impl Item {
     pub fn new(action: String, category: String, content: String) -> Self {
@@ -34,6 +41,10 @@ impl Item {
             target_time: None,
             modify_time: None,
             status: 0,
+            cron_schedule: None,
+            human_schedule: None,
+            recurring_task_id: None,
+            good_until: None,
         }
     }
 
@@ -60,6 +71,30 @@ impl Item {
         item
     }
 
+    pub fn create_recurring_task(
+        category: String,
+        content: String,
+        cron_schedule: String,
+        human_schedule: String,
+    ) -> Self {
+        let mut item = Self::new(RECURRING_TASK.to_string(), category, content);
+        item.cron_schedule = Some(cron_schedule.to_string());
+        item.human_schedule = Some(human_schedule.to_string());
+        item
+    }
+
+    pub fn create_recurring_record(
+        category: String,
+        content: String,
+        recurring_task_id: i64,
+        good_until: i64,
+    ) -> Self {
+        let mut item = Self::new(RECURRING_TASK_RECORD.to_string(), category, content);
+        item.recurring_task_id = Some(recurring_task_id);
+        item.good_until = Some(good_until);
+        item
+    }
+
     pub fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
         Ok(Self {
             id: row.get("id")?,
@@ -70,6 +105,10 @@ impl Item {
             target_time: row.get("target_time")?,
             modify_time: row.get("modify_time")?,
             status: row.get("status")?,
+            cron_schedule: row.get("cron_schedule")?,
+            human_schedule: row.get("human_schedule")?,
+            recurring_task_id: row.get("recurring_task_id")?,
+            good_until: row.get("good_until")?,
         })
     }
 }
@@ -84,6 +123,9 @@ pub struct ItemQuery<'a> {
     pub create_time_max: Option<i64>,
     pub target_time_min: Option<i64>,
     pub target_time_max: Option<i64>,
+    pub good_until_min: Option<i64>,
+    pub good_until_max: Option<i64>,
+    pub recurring_task_id: Option<i64>,
     pub statuses: Option<Vec<u8>>,
     pub limit: Option<usize>,
     pub offset: Offset,
@@ -110,6 +152,9 @@ impl<'a> ItemQuery<'a> {
             create_time_max: None,
             target_time_min: None,
             target_time_max: None,
+            good_until_min: None,
+            good_until_max: None,
+            recurring_task_id: None,
             statuses: None,
             limit: None,
             offset: Offset::None,
@@ -183,6 +228,27 @@ impl<'a> ItemQuery<'a> {
         self.order_by = Some(order_by);
         self
     }
+
+    pub fn with_good_until_range(mut self, min: Option<i64>, max: Option<i64>) -> Self {
+        self.good_until_min = min;
+        self.good_until_max = max;
+        self
+    }
+
+    pub fn with_good_until_min(mut self, good_until_min: i64) -> Self {
+        self.good_until_min = Some(good_until_min);
+        self
+    }
+
+    pub fn with_good_until_max(mut self, good_until_max: i64) -> Self {
+        self.good_until_max = Some(good_until_max);
+        self
+    }
+
+    pub fn with_recurring_task_id(mut self, recurring_task_id: i64) -> Self {
+        self.recurring_task_id = Some(recurring_task_id);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -204,6 +270,10 @@ mod tests {
         assert!(item.target_time.is_none());
         assert!(item.modify_time.is_none());
         assert_eq!(item.status, 0);
+        assert!(item.cron_schedule.is_none());
+        assert!(item.human_schedule.is_none());
+        assert!(item.recurring_task_id.is_none());
+        assert!(item.good_until.is_none());
     }
 
     #[test]
@@ -242,6 +312,53 @@ mod tests {
     }
 
     #[test]
+    fn test_create_recurring_task() {
+        let item = Item::create_recurring_task(
+            "work".to_string(),
+            "Weekly standup".to_string(),
+            "0 9 * * 1".to_string(),
+            "Weekly Monday 9AM".to_string(),
+        );
+
+        assert_eq!(item.action, "recurring_task");
+        assert_eq!(item.category, "work");
+        assert_eq!(item.content, "Weekly standup");
+        assert_eq!(item.cron_schedule, Some("0 9 * * 1".to_string()));
+        assert_eq!(item.human_schedule, Some("Weekly Monday 9AM".to_string()));
+        assert!(item.id.is_none());
+        assert!(item.target_time.is_none());
+        assert!(item.modify_time.is_none());
+        assert_eq!(item.status, 0);
+        assert!(item.recurring_task_id.is_none());
+        assert!(item.good_until.is_none());
+    }
+
+    #[test]
+    fn test_create_recurring_record() {
+        let recurring_task_id = 42;
+        let good_until = 1760000000; // Some future timestamp
+
+        let item = Item::create_recurring_record(
+            "work".to_string(),
+            "Weekly standup completed".to_string(),
+            recurring_task_id,
+            good_until,
+        );
+
+        assert_eq!(item.action, "recurring_task_record");
+        assert_eq!(item.category, "work");
+        assert_eq!(item.content, "Weekly standup completed");
+        assert_eq!(item.recurring_task_id, Some(recurring_task_id));
+        assert_eq!(item.good_until, Some(good_until));
+        assert!(item.id.is_none());
+        assert!(item.target_time.is_none());
+        assert!(item.modify_time.is_none());
+        assert_eq!(item.status, 0);
+        assert!(item.cron_schedule.is_none());
+        assert!(item.human_schedule.is_none());
+    }
+
+    #[test]
     fn test_item_query_builder() {
         // Test default values from new()
         let query = ItemQuery::new();
@@ -251,6 +368,9 @@ mod tests {
         assert_eq!(query.create_time_max, None);
         assert_eq!(query.target_time_min, None);
         assert_eq!(query.target_time_max, None);
+        assert_eq!(query.good_until_min, None);
+        assert_eq!(query.good_until_max, None);
+        assert_eq!(query.recurring_task_id, None);
         assert_eq!(query.statuses, None);
         assert_eq!(query.limit, None);
         assert_eq!(query.offset, Offset::None);
@@ -266,6 +386,21 @@ mod tests {
         let query = ItemQuery::new().with_target_time_range(Some(3000), Some(4000));
         assert_eq!(query.target_time_min, Some(3000));
         assert_eq!(query.target_time_max, Some(4000));
+
+        let query = ItemQuery::new().with_good_until_range(Some(5000), Some(6000));
+        assert_eq!(query.good_until_min, Some(5000));
+        assert_eq!(query.good_until_max, Some(6000));
+
+        let query = ItemQuery::new().with_good_until_min(7000);
+        assert_eq!(query.good_until_min, Some(7000));
+        assert_eq!(query.good_until_max, None);
+
+        let query = ItemQuery::new().with_good_until_max(8000);
+        assert_eq!(query.good_until_min, None);
+        assert_eq!(query.good_until_max, Some(8000));
+
+        let query = ItemQuery::new().with_recurring_task_id(42);
+        assert_eq!(query.recurring_task_id, Some(42));
 
         let query = ItemQuery::new().with_statuses(vec![0]);
         assert_eq!(query.statuses, Some(vec![0]));
@@ -286,9 +421,24 @@ mod tests {
         assert_eq!(query.create_time_max, None);
         assert_eq!(query.target_time_min, None);
         assert_eq!(query.target_time_max, None);
+        assert_eq!(query.good_until_min, None);
+        assert_eq!(query.good_until_max, None);
+        assert_eq!(query.recurring_task_id, None);
         assert_eq!(query.statuses, None);
         assert_eq!(query.limit, Some(100));
         assert_eq!(query.offset, Offset::None);
         assert_eq!(query.order_by, None);
+
+        // Test chaining with recurring task fields
+        let query = ItemQuery::new()
+            .with_action("recurring_task_record")
+            .with_recurring_task_id(42)
+            .with_good_until_min(10000)
+            .with_good_until_max(20000);
+
+        assert_eq!(query.action, Some("recurring_task_record"));
+        assert_eq!(query.recurring_task_id, Some(42));
+        assert_eq!(query.good_until_min, Some(10000));
+        assert_eq!(query.good_until_max, Some(20000));
     }
 }
