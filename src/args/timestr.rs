@@ -261,7 +261,12 @@ fn parse_day_range(s: &str) -> Result<String, String> {
     }
 
     let start_day = parse_weekday(parts[0])?;
-    let end_day = parse_weekday(parts[1])?;
+    let mut end_day = parse_weekday(parts[1])?;
+
+    // Handle Saturday-Sunday case: convert Sunday from 0 to 7 for valid range
+    if start_day > end_day && end_day == 0 {
+        end_day = 7;
+    }
 
     if start_day > end_day {
         return Err(format!(
@@ -410,6 +415,8 @@ mod tests {
             ("Weekly Monday 5PM", "0 17 * * 1"),
             ("Weekly Monday-Friday", "59 23 * * 1-5"),
             ("Weekly Monday-Friday 3PM", "0 15 * * 1-5"),
+            ("Weekly Saturday-Sunday", "59 23 * * 6-7"),
+            ("Weekly Sat-Sun 10AM", "0 10 * * 6-7"),
             // Monthly
             ("Monthly", "59 23 1 * *"),
             ("Monthly 3rd", "59 23 3 * *"),
