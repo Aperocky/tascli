@@ -116,7 +116,7 @@ impl Item {
 // Query Struct for querying items from db
 #[derive(Debug)]
 pub struct ItemQuery<'a> {
-    pub action: Option<&'a str>,
+    pub actions: Option<Vec<&'a str>>,
     pub category: Option<&'a str>,
     pub content_like: Option<&'a str>,
     pub create_time_min: Option<i64>,
@@ -145,7 +145,7 @@ pub enum Offset {
 impl<'a> ItemQuery<'a> {
     pub fn new() -> Self {
         ItemQuery {
-            action: None,
+            actions: None,
             category: None,
             content_like: None,
             create_time_min: None,
@@ -163,7 +163,12 @@ impl<'a> ItemQuery<'a> {
     }
 
     pub fn with_action(mut self, action: &'a str) -> Self {
-        self.action = Some(action);
+        self.actions = Some(vec![action]);
+        self
+    }
+
+    pub fn with_actions(mut self, actions: Vec<&'a str>) -> Self {
+        self.actions = Some(actions);
         self
     }
 
@@ -362,7 +367,7 @@ mod tests {
     fn test_item_query_builder() {
         // Test default values from new()
         let query = ItemQuery::new();
-        assert_eq!(query.action, None);
+        assert_eq!(query.actions, None);
         assert_eq!(query.category, None);
         assert_eq!(query.create_time_min, None);
         assert_eq!(query.create_time_max, None);
@@ -377,7 +382,10 @@ mod tests {
         assert_eq!(query.order_by, None);
 
         let query = ItemQuery::new().with_action("task");
-        assert_eq!(query.action, Some("task"));
+        assert_eq!(query.actions, Some(vec!["task"]));
+
+        let query = ItemQuery::new().with_actions(vec!["task", "record"]);
+        assert_eq!(query.actions, Some(vec!["task", "record"]));
 
         let query = ItemQuery::new().with_create_time_range(Some(1000), Some(2000));
         assert_eq!(query.create_time_min, Some(1000));
@@ -415,7 +423,7 @@ mod tests {
             .with_create_time_min(40000)
             .with_limit(100);
 
-        assert_eq!(query.action, Some("record"));
+        assert_eq!(query.actions, Some(vec!["record"]));
         assert_eq!(query.category, Some("feeding"));
         assert_eq!(query.create_time_min, Some(40000));
         assert_eq!(query.create_time_max, None);
@@ -436,7 +444,7 @@ mod tests {
             .with_good_until_min(10000)
             .with_good_until_max(20000);
 
-        assert_eq!(query.action, Some("recurring_task_record"));
+        assert_eq!(query.actions, Some(vec!["recurring_task_record"]));
         assert_eq!(query.recurring_task_id, Some(42));
         assert_eq!(query.good_until_min, Some(10000));
         assert_eq!(query.good_until_max, Some(20000));

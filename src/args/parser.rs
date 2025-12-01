@@ -221,7 +221,7 @@ fn validate_timestr(s: &str) -> Result<String, String> {
 
 fn parse_status(s: &str) -> Result<u8, String> {
     match s.to_lowercase().as_str() {
-        "ongoing" => Ok(0), // This is default.
+        "ongoing" => Ok(0),
         "done" | "complete" | "completed" => Ok(1),
         "cancelled" | "canceled" | "cancel" => Ok(2),
         "duplicate" => Ok(3),

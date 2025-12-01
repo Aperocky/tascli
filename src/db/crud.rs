@@ -96,9 +96,18 @@ pub fn query_items(
     let mut conditions: Vec<String> = Vec::new();
     let mut params: Vec<String> = Vec::new();
 
-    if let Some(a) = item_query.action {
-        conditions.push("action = ?".to_string());
-        params.push(a.to_string());
+    if let Some(actions) = &item_query.actions {
+        if actions.len() == 1 {
+            conditions.push("action = ?".to_string());
+            params.push(actions[0].to_string());
+        } else {
+            let action_list = actions
+                .iter()
+                .map(|a| format!("'{}'", a))
+                .collect::<Vec<String>>()
+                .join(", ");
+            conditions.push(format!("action IN ({})", action_list));
+        }
     }
 
     if let Some(c) = item_query.category {
@@ -629,6 +638,52 @@ mod tests {
         assert_eq!(review_items.len(), 2);
         for item in &review_items {
             assert!(item.content.contains("review"));
+        }
+    }
+
+    #[test]
+    fn test_query_multiple_actions() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Insert records and recurring_task_records
+        insert_record(&conn, "feeding", "100ML", "yesterday 2PM");
+        insert_record(&conn, "feeding", "110ML", "yesterday 5PM");
+        insert_task(&conn, "work", "meeting", "today");
+
+        let task1_id = insert_recurring_task(&conn, "work", "Weekly standup", "Weekly Monday 9AM");
+        insert_recurring_record(&conn, "work", "Standup completed", task1_id, 1000);
+        insert_recurring_record(&conn, "work", "Standup completed", task1_id, 2000);
+
+        // Test single action (backward compatibility)
+        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        assert_eq!(records.len(), 2);
+        for item in &records {
+            assert_eq!(item.action, "record");
+        }
+
+        // Test multiple actions
+        let all_records = query_items(
+            &conn,
+            &ItemQuery::new().with_actions(vec!["record", "recurring_task_record"]),
+        )
+        .unwrap();
+        assert_eq!(all_records.len(), 4);
+        for item in &all_records {
+            assert!(item.action == "record" || item.action == "recurring_task_record");
+        }
+
+        // Test multiple actions with category filter
+        let work_records = query_items(
+            &conn,
+            &ItemQuery::new()
+                .with_actions(vec!["record", "recurring_task_record"])
+                .with_category("work"),
+        )
+        .unwrap();
+        assert_eq!(work_records.len(), 2);
+        for item in &work_records {
+            assert!(item.action == "record" || item.action == "recurring_task_record");
+            assert_eq!(item.category, "work");
         }
     }
 
