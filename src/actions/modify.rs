@@ -8,6 +8,7 @@ use rusqlite::Connection;
 use crate::{
     actions::display,
     args::{
+        cron,
         parser::{
             DeleteCommand,
             DoneCommand,
@@ -21,9 +22,10 @@ use crate::{
             delete_item,
             get_item,
             insert_item,
+            query_items,
             update_item,
         },
-        item::Item,
+        item::{Item, ItemQuery},
     },
 };
 
@@ -33,17 +35,55 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     let status = cmd.status;
 
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
-    if item.action == "record" {
+    if item.action == "record" || item.action == "recurring_task_record" {
         return Err("Cannot complete a record".to_string());
     }
 
-    // Add comment to task if provided
+    if item.action == "recurring_task" {
+        let cron_schedule = item.cron_schedule.as_ref()
+            .ok_or_else(|| "Recurring task missing cron schedule".to_string())?;
+
+        let last_occurrence = cron::get_last_occurrence(cron_schedule)?;
+
+        let existing_records = query_items(
+            conn,
+            &ItemQuery::new()
+                .with_action("recurring_task_record")
+                .with_recurring_task_id(item.id.unwrap())
+                .with_good_until_min(last_occurrence)
+        ).map_err(|e| format!("Failed to query existing records: {:?}", e))?;
+
+        if !existing_records.is_empty() {
+            return Err("This recurring task has already been completed for this iteration".to_string());
+        }
+
+        let next_occurrence = cron::get_next_occurrence(cron_schedule)?;
+
+        let mut record_content = format!("Completed Recurring Task: {}", item.content);
+        if let Some(comment) = &cmd.comment {
+            record_content.push('\n');
+            record_content.push_str(comment);
+        }
+
+        let completion_record = Item::create_recurring_record(
+            item.category.clone(),
+            record_content,
+            item.id.unwrap(),
+            next_occurrence,
+        );
+        insert_item(conn, &completion_record)
+            .map_err(|e| format!("Failed to create completion record: {:?}", e))?;
+
+        display::print_bold("Completed Recurring Task:");
+        display::print_items(&[item], false, false);
+        return Ok(());
+    }
+
     if let Some(comment) = &cmd.comment {
         item.content.push('\n');
         item.content.push_str(comment);
     }
 
-    // Create completion record using updated task content
     let completion_content = format!("Completed Task: {}", item.content);
     let completion_record = Item::new(
         "record".to_string(),
@@ -65,7 +105,8 @@ pub fn handle_deletecmd(conn: &Connection, cmd: &DeleteCommand) -> Result<(), St
     let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let item = get_item(conn, row_id).map_err(|e| format!("Failed to find item: {:?}", e))?;
     let item_type = item.action.clone();
-    display::print_items(&[item], item_type == "record", false);
+    let is_record = item_type == "record" || item_type == "recurring_task_record";
+    display::print_items(&[item], is_record, false);
     let accept = prompt_yes_no(&format!(
         "Are you sure you want to delete this {}? ",
         &item_type
@@ -83,6 +124,32 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     validate_cache(conn)?;
     let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
+
+    if item.action == "recurring_task" {
+        if cmd.target_time.is_some() {
+            return Err("Cannot update target_time for recurring tasks".to_string());
+        }
+        if cmd.status.is_some() {
+            return Err("Cannot update status for recurring tasks".to_string());
+        }
+        if cmd.add_content.is_some() {
+            return Err("Cannot use add_content for recurring tasks, use content instead".to_string());
+        }
+
+        if let Some(category) = &cmd.category {
+            item.category = category.clone();
+        }
+
+        if let Some(content) = &cmd.content {
+            item.content = content.clone();
+        }
+
+        update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
+
+        display::print_bold("Updated Recurring Task:");
+        display::print_items(&[item], false, false);
+        return Ok(());
+    }
 
     if let Some(target) = &cmd.target_time {
         let target_time = timestr::to_unix_epoch(target)?;
@@ -108,7 +175,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
 
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
 
-    let is_record = "record" == item.action;
+    let is_record = item.action == "record" || item.action == "recurring_task_record";
     let action = if is_record { "Record" } else { "Task" };
     display::print_bold(&format!("Updated {}:", action));
     display::print_items(&[item], is_record, false);
@@ -155,6 +222,7 @@ mod tests {
         },
         tests::{
             get_test_conn,
+            insert_recurring_task,
             insert_task,
         },
     };
@@ -176,13 +244,11 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 1);
 
-        // Check that a completion record was created
         let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].content, "Completed Task: finish report");
         assert_eq!(records[0].category, "work");
 
-        // update again
         let done_cmd = DoneCommand {
             index: 1,
             status: 2,
@@ -192,7 +258,6 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 2);
 
-        // Check that another completion record was created
         let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
         assert_eq!(records.len(), 2);
     }
@@ -248,7 +313,6 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.content, "reorganize garage thoroughly");
 
-        // Test adding to content
         let update_cmd = UpdateCommand {
             index: 1,
             target_time: None,
@@ -264,7 +328,6 @@ mod tests {
             "reorganize garage thoroughly\nmove stuff to basement"
         );
 
-        // Test updating status
         let update_cmd = UpdateCommand {
             index: 1,
             target_time: None,
@@ -277,7 +340,6 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 3);
 
-        // Test updating target_time and category
         let update_cmd = UpdateCommand {
             index: 1,
             target_time: Some("eow".to_string()),
@@ -289,5 +351,103 @@ mod tests {
         handle_updatecmd(&conn, &update_cmd).unwrap();
         let got_item = get_item(&conn, item_id).unwrap();
         assert_eq!(got_item.category, "chore");
+    }
+
+    #[test]
+    fn test_handle_donecmd_recurring_task() {
+        let (conn, _temp_file) = get_test_conn();
+        let task_id = insert_recurring_task(&conn, "work", "Daily standup", "Daily 9AM");
+        let items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        cache::store(&conn, &items).unwrap();
+
+        let done_cmd = DoneCommand {
+            index: 1,
+            status: 1,
+            comment: Some("Discussed sprint goals".to_string()),
+        };
+        let result = handle_donecmd(&conn, &done_cmd);
+        assert!(result.is_ok());
+
+        let records = query_items(&conn, &ItemQuery::new().with_action("recurring_task_record")).unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].content.contains("Completed Recurring Task: Daily standup"));
+        assert!(records[0].content.contains("Discussed sprint goals"));
+        assert_eq!(records[0].category, "work");
+        assert_eq!(records[0].recurring_task_id, Some(task_id));
+        assert!(records[0].good_until.is_some());
+
+        let done_cmd2 = DoneCommand {
+            index: 1,
+            status: 1,
+            comment: None,
+        };
+        let result = handle_donecmd(&conn, &done_cmd2);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "This recurring task has already been completed for this iteration"
+        );
+
+        let records = query_items(&conn, &ItemQuery::new().with_action("recurring_task_record")).unwrap();
+        assert_eq!(records.len(), 1);
+    }
+
+    #[test]
+    fn test_handle_updatecmd_recurring_task() {
+        let (conn, _temp_file) = get_test_conn();
+        let task_id = insert_recurring_task(&conn, "work", "Daily standup", "Daily 9AM");
+        let items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        cache::store(&conn, &items).unwrap();
+
+        let update_cmd = UpdateCommand {
+            index: 1,
+            target_time: None,
+            category: Some("meetings".to_string()),
+            content: Some("Daily team sync".to_string()),
+            add_content: None,
+            status: None,
+        };
+        let result = handle_updatecmd(&conn, &update_cmd);
+        assert!(result.is_ok());
+
+        let updated_item = get_item(&conn, task_id).unwrap();
+        assert_eq!(updated_item.content, "Daily team sync");
+        assert_eq!(updated_item.category, "meetings");
+
+        let update_cmd = UpdateCommand {
+            index: 1,
+            target_time: Some("tomorrow".to_string()),
+            category: None,
+            content: None,
+            add_content: None,
+            status: None,
+        };
+        let result = handle_updatecmd(&conn, &update_cmd);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Cannot update target_time for recurring tasks");
+
+        let update_cmd = UpdateCommand {
+            index: 1,
+            target_time: None,
+            category: None,
+            content: None,
+            add_content: None,
+            status: Some(1),
+        };
+        let result = handle_updatecmd(&conn, &update_cmd);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Cannot update status for recurring tasks");
+
+        let update_cmd = UpdateCommand {
+            index: 1,
+            target_time: None,
+            category: None,
+            content: None,
+            add_content: Some("extra notes".to_string()),
+            status: None,
+        };
+        let result = handle_updatecmd(&conn, &update_cmd);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Cannot use add_content for recurring tasks, use content instead");
     }
 }
