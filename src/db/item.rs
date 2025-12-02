@@ -7,19 +7,28 @@ use rusqlite::Row;
 
 #[derive(Debug, Clone)]
 pub struct Item {
+    // Optional id field as when item is first created at runtime it
+    // has not received an id from the db yet.
     pub id: Option<i64>,
     pub action: String,
     pub category: String,
     pub content: String,
     pub create_time: i64,
+    // This field is dedicated for tasks (deadline)
     pub target_time: Option<i64>,
     #[allow(dead_code)]
     pub modify_time: Option<i64>,
     pub status: u8,
+    // cron and human schedule are specific to recurring tasks.
     pub cron_schedule: Option<String>,
     pub human_schedule: Option<String>,
+    // recurring_task_id and good_until for recurring task records.
+    // these records are generated when a recurring task is "done"
     pub recurring_task_id: Option<i64>,
     pub good_until: Option<i64>,
+    // Runtime-only field applicable to recurring task, not persisted to db
+    // Computed at application layer indicating if a recurring_task is completed.
+    pub recurring_interval_complete: bool,
 }
 
 const RECURRING_TASK: &str = "recurring_task";
@@ -45,6 +54,7 @@ impl Item {
             human_schedule: None,
             recurring_task_id: None,
             good_until: None,
+            recurring_interval_complete: false,
         }
     }
 
@@ -109,6 +119,7 @@ impl Item {
             human_schedule: row.get("human_schedule")?,
             recurring_task_id: row.get("recurring_task_id")?,
             good_until: row.get("good_until")?,
+            recurring_interval_complete: false,
         })
     }
 }
@@ -279,6 +290,7 @@ mod tests {
         assert!(item.human_schedule.is_none());
         assert!(item.recurring_task_id.is_none());
         assert!(item.good_until.is_none());
+        assert!(!item.recurring_interval_complete);
     }
 
     #[test]

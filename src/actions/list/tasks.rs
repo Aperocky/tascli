@@ -1,6 +1,12 @@
 use chrono::Local;
 use rusqlite::Connection;
 
+use super::{
+    handle_next_page,
+    CLOSED_STATUS_CODES,
+    OPEN_STATUS_CODES,
+    TARGET_TIME_COL,
+};
 use crate::{
     actions::display,
     args::{
@@ -11,14 +17,15 @@ use crate::{
     db::{
         cache,
         crud::query_items,
-        item::{Item, ItemQuery, Offset},
+        item::{
+            Item,
+            ItemQuery,
+            Offset,
+        },
     },
 };
 
-use super::{handle_next_page, OPEN_STATUS_CODES, CLOSED_STATUS_CODES, TARGET_TIME_COL};
-
 pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), String> {
-    // Query recurring tasks
     let recurring_tasks = match query_recurring_tasks(conn, &cmd) {
         Ok(tasks) => tasks,
         Err(estr) => {
@@ -26,20 +33,24 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
             return Ok(());
         }
     };
-
-    // Check if recurring tasks hit the limit BEFORE filtering
     let recurring_hit_limit = recurring_tasks.len() == cmd.limit;
 
-    // Filter by completion status based on cmd.status
+    // Mark completion status for all recurring tasks
+    let recurring_tasks = mark_recurring_task_by_completion(conn, recurring_tasks)?;
     let recurring_tasks = if cmd.status == 255 {
-        // 255 = all statuses, skip completion filter
         recurring_tasks
-    } else if cmd.status == 253 {
-        // 253 = closed statuses, show completed tasks
-        filter_recurring_task_by_completion(conn, recurring_tasks, true)?
+    } else if cmd.status == 253 || cmd.status == 1 {
+        // 253 = closed statuses; 1 = done, show only completed tasks
+        recurring_tasks
+            .into_iter()
+            .filter(|t| t.recurring_interval_complete)
+            .collect()
     } else {
-        // All other statuses (0, 254, etc.) = show incomplete tasks
-        filter_recurring_task_by_completion(conn, recurring_tasks, false)?
+        // All other statuses show only incomplete tasks
+        recurring_tasks
+            .into_iter()
+            .filter(|t| !t.recurring_interval_complete)
+            .collect()
     };
     let recurring_tasks = filter_recurring_task_by_time(recurring_tasks, &cmd)?;
 
@@ -84,7 +95,6 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
     Ok(())
 }
 
-// Query recurring tasks
 // Some cmd query argument do not apply - moved to application layer.
 // Skip query for status because recurring tasks do not have status.
 fn query_recurring_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, String> {
@@ -103,6 +113,13 @@ fn query_recurring_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec
             Offset::None => return Err("No next page available".to_string()),
             _ => return Ok(Vec::new()), // Wrong offset type, skip recurring tasks query
         }
+    }
+    match cmd.status {
+        // For open, done, closed and all we capture all items
+        // to be filtered at handler level.
+        1 | 253 | 254 | 255 => {}
+        // retain other specific status query
+        _ => query = query.with_statuses(vec![cmd.status]),
     }
     query = query.with_offset(offset);
     query = query.with_limit(cmd.limit);
@@ -135,13 +152,11 @@ fn filter_recurring_task_by_time(
     }
 }
 
-fn filter_recurring_task_by_completion(
+fn mark_recurring_task_by_completion(
     conn: &Connection,
-    recurring_tasks: Vec<Item>,
-    show_completed: bool,
+    mut recurring_tasks: Vec<Item>,
 ) -> Result<Vec<Item>, String> {
-    let mut filtered: Vec<Item> = Vec::new();
-    for recurring_task in recurring_tasks {
+    for recurring_task in &mut recurring_tasks {
         let cron_schedule = recurring_task.cron_schedule.as_ref().unwrap();
         let last_occurrence = cron::get_last_occurrence(cron_schedule)?;
         let recurring_task_id = recurring_task.id.unwrap();
@@ -151,17 +166,10 @@ fn filter_recurring_task_by_completion(
             .with_action("recurring_task_record")
             .with_recurring_task_id(recurring_task_id)
             .with_good_until_min(last_occurrence);
-
         let records = query_items(conn, &record_query).map_err(|e| e.to_string())?;
-
-        let is_completed = !records.is_empty();
-
-        // Keep task based on filter criteria
-        if show_completed == is_completed {
-            filtered.push(recurring_task);
-        }
+        recurring_task.recurring_interval_complete = !records.is_empty();
     }
-    Ok(filtered)
+    Ok(recurring_tasks)
 }
 
 fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, String> {
@@ -447,17 +455,27 @@ mod tests {
         let all_tasks = query_recurring_tasks(&conn, &cmd).unwrap();
         assert_eq!(all_tasks.len(), 3);
 
-        // Test filtering for incomplete tasks (show_completed = false)
-        let incomplete = filter_recurring_task_by_completion(&conn, all_tasks.clone(), false).unwrap();
-        assert_eq!(incomplete.len(), 1);
-        assert_eq!(incomplete[0].id, Some(task3_id));
+        // Mark completion status
+        let marked_tasks = mark_recurring_task_by_completion(&conn, all_tasks).unwrap();
+        assert_eq!(marked_tasks.len(), 3);
 
-        // Test filtering for completed tasks (show_completed = true)
-        let completed = filter_recurring_task_by_completion(&conn, all_tasks.clone(), true).unwrap();
-        assert_eq!(completed.len(), 2);
-        let completed_ids: Vec<i64> = completed.iter().map(|t| t.id.unwrap()).collect();
-        assert!(completed_ids.contains(&task1_id));
-        assert!(completed_ids.contains(&task2_id));
+        // Verify completion flags are set correctly
+        for task in &marked_tasks {
+            let task_id = task.id.unwrap();
+            if task_id == task1_id || task_id == task2_id {
+                assert!(
+                    task.recurring_interval_complete,
+                    "Task {} should be marked complete",
+                    task_id
+                );
+            } else if task_id == task3_id {
+                assert!(
+                    !task.recurring_interval_complete,
+                    "Task {} should be marked incomplete",
+                    task_id
+                );
+            }
+        }
     }
 
     #[test]
@@ -558,10 +576,20 @@ mod tests {
 
         // Insert 15 regular tasks
         for i in 1..=12 {
-            insert_task(&conn, "work", &format!("Regular task {}", i), &format!("tomorrow {}PM", i));
+            insert_task(
+                &conn,
+                "work",
+                &format!("Regular task {}", i),
+                &format!("tomorrow {}PM", i),
+            );
         }
         for i in 13..=15 {
-            insert_task(&conn, "work", &format!("Regular task {}", i), &format!("tomorrow {}AM", i - 12));
+            insert_task(
+                &conn,
+                "work",
+                &format!("Regular task {}", i),
+                &format!("tomorrow {}AM", i - 12),
+            );
         }
 
         // First page: Should get 3 recurring + 7 regular = 10 total

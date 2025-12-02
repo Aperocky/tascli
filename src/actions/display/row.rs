@@ -29,10 +29,11 @@ impl DisplayRow {
             timestamp_to_display_string(task.target_time.unwrap(), false)
         };
 
-        // Add status indicator for both types
         if task.status != 0 {
             let status_str = translate_status(task.status);
             timestr.push_str(&format!(" ({})", status_str));
+        } else if task.recurring_interval_complete {
+            timestr.push_str(" (fulfilled)");
         }
 
         DisplayRow {
