@@ -299,8 +299,12 @@ fn parse_month_day(s: &str) -> Result<(u32, u32), String> {
 
     let (month, day) = match parts.as_slice() {
         [m, d] => {
-            let month = m.parse::<u32>().map_err(|_| format!("Invalid month in '{}'", s))?;
-            let day = d.parse::<u32>().map_err(|_| format!("Invalid day in '{}'", s))?;
+            let month = m
+                .parse::<u32>()
+                .map_err(|_| format!("Invalid month in '{}'", s))?;
+            let day = d
+                .parse::<u32>()
+                .map_err(|_| format!("Invalid day in '{}'", s))?;
             (month, day)
         }
         _ => return Err(format!("Invalid month/day format: '{}'", s)),

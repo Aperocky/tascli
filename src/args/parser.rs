@@ -3,7 +3,7 @@ use clap::{
     Parser,
     Subcommand,
 };
-use crate::args::timestr::parse_flexible_timestr;
+use crate::args::timestr::{parse_flexible_timestr, parse_recurring_timestr};
 
 /// a simple CLI tool for tracking tasks and records from terminal
 ///
@@ -215,7 +215,12 @@ fn validate_index(s: &str) -> Result<usize, String> {
 fn validate_timestr(s: &str) -> Result<String, String> {
     match parse_flexible_timestr(s) {
         Ok(_) => Ok(s.to_string()),
-        Err(e) => Err(e)
+        Err(_) => {
+            match parse_recurring_timestr(s) {
+                Ok(_) => Ok(s.to_string()),
+                Err(e) => Err(e)
+            }
+        }
     }
 }
 
