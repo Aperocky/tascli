@@ -1,5 +1,9 @@
 # Changelog
 
+### v0.10.0
+- ✨ Added recurring tasks and records for recurring tasks, use the same syntax but with a schedule, e.g. "Daily": `tascli task "write diary" daily`
+- ✨ Completing recurring task will create a recurring task record. The recurring task would show as completed if queried until the next interval.
+
 ### v0.9.0
 
 - ✨ Added `tascli list show $index` command to simplify copy paste operations

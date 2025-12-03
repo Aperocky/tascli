@@ -38,7 +38,8 @@ pub struct TaskCommand {
     /// description of the task
     #[arg(value_parser = |s: &str| syntax_helper("task", s))]
     pub content: String,
-    /// time the task is due for completion, default to EOD
+    /// time the task is due for completion, default to EOD,
+    /// If it is a schedule, then a recurring task would be created.
     #[arg(value_parser = validate_timestr)]
     pub timestr: Option<String>,
     /// category of the task

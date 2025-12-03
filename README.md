@@ -35,6 +35,13 @@ tascli task "Do taxes" 4/15
 tascli task -c work "Read emails" week
 ```
 
+Create recurring tasks:
+
+```bash
+tascli task "write diary" daily
+tascli task "mortgage payment" "monthly 17th"
+```
+
 List tasks:
 ```bash
 # List active tasks
@@ -46,7 +53,7 @@ Task List:
 ----------------------------------------------------------------------------------------------
 | Index  | Category            | Content                               | Deadline            |
 ----------------------------------------------------------------------------------------------
-| 1      | life                | Unpack the crib                       | Today               |
+| 1      | life (recurring)    | write diary                           | Today               |
 ----------------------------------------------------------------------------------------------
 | 2      | tascli              | Add pagination capability for tascli  | Sunday              |
 |        |                     | list actions                          |                     |
@@ -72,14 +79,14 @@ Complete tasks:
 tascli done 1
 ```
 
-List all tasks in `tascli` category (including completed)
-```bash
-tascli list task -s all -c tascli
-```
-
 Search tasks:
 ```bash
 tascli list task --search "rust"
+```
+
+List all tasks in `tascli` category (including completed)
+```bash
+tascli list task -s all -c tascli
 ```
 
 Example output:
@@ -88,8 +95,7 @@ Task List:
 ----------------------------------------------------------------------------------------------
 | Index  | Category            | Content                               | Deadline            |
 ----------------------------------------------------------------------------------------------
-| 1      | tascli              | Add a tascli command to delete a row  | Today (completed)   |
-|        |                     | in the task or record table           |                     |
+| 1      | baby (Recurring)    | Mix egg yolk milk for Rowan           | Daily (fulfilled)   |
 ----------------------------------------------------------------------------------------------
 | 2      | tascli              | Fix addition and modification commands| Today (completed)   |
 |        |                     | output to have N/A for index          |                     |
@@ -141,6 +147,8 @@ Records List:
 | 2      | feeding             | breastfeeding                         | Today 4:10AM        |
 ----------------------------------------------------------------------------------------------
 | 3      | feeding             | 100ML                                 | Today 7:30AM        |
+----------------------------------------------------------------------------------------------
+| 3      | life (Recurring)    | write diary                           | Today 10:30AM       |
 ----------------------------------------------------------------------------------------------
 | 4      | feeding             | 110ML                                 | Today 11:20AM       |
 ----------------------------------------------------------------------------------------------
