@@ -54,7 +54,8 @@ pub struct RecordCommand {
     /// category of the record
     #[arg(short, long)]
     pub category: Option<String>,
-    /// time the record is made, default to current time
+    /// time the record is made,
+    /// default to current time
     #[arg(short = 't', long = "time", value_parser = validate_timestr)]
     pub timestr: Option<String>,
 }
@@ -84,7 +85,9 @@ pub struct UpdateCommand {
     /// index from previous list command
     #[arg(value_parser = validate_index)]
     pub index: usize,
-    /// update the target time of task or event time of record.
+    /// update the target time of task,
+    /// or event time of record,
+    /// or schedule of a recurring task
     #[arg(short, long, value_parser = validate_timestr)]
     pub target_time: Option<String>,
     /// update category of the task/record
@@ -96,7 +99,7 @@ pub struct UpdateCommand {
     /// add to entry content in a newline 
     #[arg(short, long)]
     pub add_content: Option<String>,
-    /// update status of the tasks
+    /// update status of the tasks,
     /// accept ongoing|done|cancelled|duplicate|suspended|pending
     #[arg(short, long, value_parser = parse_status)]
     pub status: Option<u8>
@@ -108,16 +111,17 @@ pub enum ListCommand {
     Task(ListTaskCommand),
     /// list records
     Record(ListRecordCommand),
-    /// Show specific content from previous list command by index
-    /// This allow the content to be displayed in non-table format
+    /// Show specific content from previous list command by index,
+    /// This allow the content to be displayed in non-table format,
     /// Better for copy paste operations.
     Show(ShowContentCommand),
 }
 
 #[derive(Debug, Args)]
 pub struct ListTaskCommand {
-    /// task due time. e.g. today. when present, this restrict the task listed to be those that are
-    /// marked for completion prior to this time.
+    /// task due time. e.g. today,
+    /// when present it restrict the task listed to be those,
+    /// that are marked for completion prior to this time
     pub timestr: Option<String>,
     /// category of the task
     #[arg(short, long)]
@@ -125,12 +129,12 @@ pub struct ListTaskCommand {
     /// days in the future for tasks to list - mutually exclusive with timestr
     #[arg(short, long, conflicts_with = "timestr")]
     pub days: Option<usize>,
-    /// status to list, default to "open"
-    /// you can filter individually to ongoing|done|cancelled|duplicate|suspended|pending
+    /// status to list, default to "open",
+    /// you can filter individually to ongoing|done|cancelled|duplicate|suspended|pending,
     /// or aggregate status like open|closed|all
     #[arg(short, long, value_parser = parse_status, default_value_t = 254)]
     pub status: u8,
-    /// hhow overdue tasks - tasks that are scheduled to be completed in the past
+    /// hhow overdue tasks - tasks that are scheduled to be completed in the past,
     /// but were not closed, these tasks are not returned by default
     #[arg(short, long, default_value_t = false)]
     pub overdue: bool,
@@ -150,18 +154,19 @@ pub struct ListRecordCommand {
     /// category of the record
     #[arg(short, long)]
     pub category: Option<String>,
-    /// days of records to retrieve - e.g. 1 shows record made in the last 24 hours.
-    /// value of 7 would show record made in the past week.
+    /// days of records to retrieve,
+    /// e.g. 1 shows record made in the last 24 hours,
+    /// value of 7 would show record made in the past week
     #[arg(short, long, conflicts_with_all = ["starting_date", "ending_date"])]
     pub days: Option<usize>,
     /// limit the amount of records returned
     #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]
     pub limit: usize,
-    /// list the record starting from this time
+    /// list the record starting from this time,
     /// if this is date only, then it is non-inclusive
     #[arg(short, long, value_parser = validate_timestr, conflicts_with = "days")]
     pub starting_time: Option<String>,
-    /// list the record ending at this time
+    /// list the record ending at this time,
     /// if this is date only, then it is inclusive
     #[arg(short, long, value_parser = validate_timestr, conflicts_with = "days")]
     pub ending_time: Option<String>,

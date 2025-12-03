@@ -25,7 +25,10 @@ use crate::{
             query_items,
             update_item,
         },
-        item::{Item, ItemQuery},
+        item::{
+            Item,
+            ItemQuery,
+        },
     },
 };
 
@@ -40,7 +43,9 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     }
 
     if item.action == "recurring_task" {
-        let cron_schedule = item.cron_schedule.as_ref()
+        let cron_schedule = item
+            .cron_schedule
+            .as_ref()
             .ok_or_else(|| "Recurring task missing cron schedule".to_string())?;
 
         let last_occurrence = cron::get_last_occurrence(cron_schedule)?;
@@ -50,11 +55,14 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
             &ItemQuery::new()
                 .with_action("recurring_task_record")
                 .with_recurring_task_id(item.id.unwrap())
-                .with_good_until_min(last_occurrence)
-        ).map_err(|e| format!("Failed to query existing records: {:?}", e))?;
+                .with_good_until_min(last_occurrence),
+        )
+        .map_err(|e| format!("Failed to query existing records: {:?}", e))?;
 
         if !existing_records.is_empty() {
-            return Err("This recurring task has already been completed for this iteration".to_string());
+            return Err(
+                "This recurring task has already been completed for this iteration".to_string(),
+            );
         }
 
         let next_occurrence = cron::get_next_occurrence(cron_schedule)?;
@@ -126,14 +134,25 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
 
     if item.action == "recurring_task" {
-        if cmd.target_time.is_some() {
-            return Err("Cannot update target_time for recurring tasks".to_string());
-        }
         if cmd.status.is_some() {
             return Err("Cannot update status for recurring tasks".to_string());
         }
         if cmd.add_content.is_some() {
-            return Err("Cannot use add_content for recurring tasks, use content instead".to_string());
+            return Err(
+                "Cannot use add_content for recurring tasks, use content instead".to_string(),
+            );
+        }
+
+        if let Some(schedule_str) = &cmd.target_time {
+            match timestr::parse_recurring_timestr(schedule_str) {
+                Ok(cron_schedule) => {
+                    item.cron_schedule = Some(cron_schedule);
+                    item.human_schedule = Some(schedule_str.clone());
+                }
+                Err(_) => {
+                    return Err("Cannot parse schedule".to_string());
+                }
+            }
         }
 
         if let Some(category) = &cmd.category {
@@ -368,9 +387,15 @@ mod tests {
         let result = handle_donecmd(&conn, &done_cmd);
         assert!(result.is_ok());
 
-        let records = query_items(&conn, &ItemQuery::new().with_action("recurring_task_record")).unwrap();
+        let records = query_items(
+            &conn,
+            &ItemQuery::new().with_action("recurring_task_record"),
+        )
+        .unwrap();
         assert_eq!(records.len(), 1);
-        assert!(records[0].content.contains("Completed Recurring Task: Daily standup"));
+        assert!(records[0]
+            .content
+            .contains("Completed Recurring Task: Daily standup"));
         assert!(records[0].content.contains("Discussed sprint goals"));
         assert_eq!(records[0].category, "work");
         assert_eq!(records[0].recurring_task_id, Some(task_id));
@@ -388,7 +413,11 @@ mod tests {
             "This recurring task has already been completed for this iteration"
         );
 
-        let records = query_items(&conn, &ItemQuery::new().with_action("recurring_task_record")).unwrap();
+        let records = query_items(
+            &conn,
+            &ItemQuery::new().with_action("recurring_task_record"),
+        )
+        .unwrap();
         assert_eq!(records.len(), 1);
     }
 
@@ -414,17 +443,20 @@ mod tests {
         assert_eq!(updated_item.content, "Daily team sync");
         assert_eq!(updated_item.category, "meetings");
 
+        // Test updating schedule
         let update_cmd = UpdateCommand {
             index: 1,
-            target_time: Some("tomorrow".to_string()),
+            target_time: Some("Daily 3PM".to_string()),
             category: None,
             content: None,
             add_content: None,
             status: None,
         };
         let result = handle_updatecmd(&conn, &update_cmd);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cannot update target_time for recurring tasks");
+        assert!(result.is_ok());
+        let updated_item = get_item(&conn, task_id).unwrap();
+        assert_eq!(updated_item.cron_schedule, Some("0 15 * * *".to_string()));
+        assert_eq!(updated_item.human_schedule, Some("Daily 3PM".to_string()));
 
         let update_cmd = UpdateCommand {
             index: 1,
@@ -436,7 +468,10 @@ mod tests {
         };
         let result = handle_updatecmd(&conn, &update_cmd);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cannot update status for recurring tasks");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cannot update status for recurring tasks"
+        );
 
         let update_cmd = UpdateCommand {
             index: 1,
@@ -448,6 +483,48 @@ mod tests {
         };
         let result = handle_updatecmd(&conn, &update_cmd);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cannot use add_content for recurring tasks, use content instead");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cannot use add_content for recurring tasks, use content instead"
+        );
+    }
+
+    #[test]
+    fn test_block_task_conversions() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Test blocking regular task to recurring conversion
+        insert_task(&conn, "work", "finish report", "tomorrow");
+        let items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        cache::store(&conn, &items).unwrap();
+
+        let update_cmd = UpdateCommand {
+            index: 1,
+            target_time: Some("Daily 9AM".to_string()),
+            category: None,
+            content: None,
+            add_content: None,
+            status: None,
+        };
+        let result = handle_updatecmd(&conn, &update_cmd);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Couldn't parse"));
+
+        // Test blocking recurring task to regular conversion
+        cache::clear(&conn).unwrap();
+        insert_recurring_task(&conn, "work", "Daily standup", "Daily 9AM");
+        let items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        cache::store(&conn, &items).unwrap();
+
+        let update_cmd = UpdateCommand {
+            index: 1,
+            target_time: Some("tomorrow".to_string()),
+            category: None,
+            content: None,
+            add_content: None,
+            status: None,
+        };
+        let result = handle_updatecmd(&conn, &update_cmd);
+        assert!(result.is_err());
     }
 }

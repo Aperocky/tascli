@@ -503,7 +503,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_listtasks_pagination_with_recurring() {
+    fn test_list_tasks_pagination_with_recurring() {
         let (conn, _temp_file) = get_test_conn();
 
         // Insert many recurring tasks to trigger pagination
