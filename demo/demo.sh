@@ -1,35 +1,38 @@
 #doitlive speed: 2
 #doitlive prompt: {user.bold.cyan} $
 
-# basic demo
-tascli task "create simple task"
+# task operations
+tascli task "create a simple demo task"
+tascli task --category demo "create a recurring demo task" Daily
+tascli task -c demo "demo task due end of month" eom
 tascli list task
 tascli list task today
-tascli done 1
-
-# task operations
-tascli task -c demo "demo task due tomorrow 4:00PM" "tomorrow 4PM"
-tascli task -c demo "demo task due end of month" eom
 tascli list task -c demo
-tascli update 1 -a "actually make it due Friday" -t friday
+tascli list task --search "demo task"
+tascli done 1
 tascli done 2
-tascli list task -c demo -s all
+tascli update 3 -a "actually make it due Friday" -t friday
+tascli list task -s all --search "demo task"
 
 # record operations
-tascli record "Insert this record" -c demo
-tascli record "if the content line of tasks and records gets long, it wraps around. 并且支持unicode字符" -c demo
+echo "Now demo-ing inserting and listing records"
+tascli record -c demo "Insert this record"
+tascli record -c demo "if the content line of tasks and records gets long, it wraps around. 并且支持unicode字符"
+tascli list record --search "demo task"
 tascli list record -c demo
-tascli list record -c FTP
-tascli list record -s 3/22 -e 3/24
-
+echo "Note how completed tasks automatically creates records"
 tascli help
 
 # cleanup.
+#doitlive speed: 3
 tascli list task -c demo -s all
-tascli delete 1
-tascli delete 2
-tascli list task -c default
-tascli delete 1
+yes | tascli delete 1
+yes | tascli delete 2
+tascli list task -s done --search "demo task"
+yes | tascli delete 1
+tascli list record --search "demo task"
+yes | tascli delete 1
 tascli list record -c demo
-tascli delete 1
-tascli delete 2
+yes | tascli delete 1
+yes | tascli delete 2
+yes | tascli delete 3
