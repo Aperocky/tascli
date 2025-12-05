@@ -79,6 +79,8 @@ Complete tasks:
 tascli done 1
 ```
 
+Completing a task or a recurring tasks will generate a corresponding record.
+
 Search tasks:
 ```bash
 tascli list task --search "rust"
@@ -164,6 +166,11 @@ This application accepts flexible time strings in various formats:
 - **Combined**: `2025-03-24 15:30`, `tomorrow 3PM`
 
 When only a date is provided, the time defaults to end of day (23:59:59). When only a time is provided, the date defaults to today.
+
+Recurring Formats (schedules) are applicable to tasks:
+
+- **Recurring Formats**: `daily`, `daily 9PM`, `weekly`, `weekly Friday 9AM`, `weekly mon-fri`, `monthly 1st`
+- **Recurring Formats (II)**: `every day`, `every 9PM`, `every monday`, `every 9th of the month`, `every 2/14`
 
 ### Configuration
 

@@ -235,6 +235,63 @@ pub fn parse_recurring_timestr(s: &str) -> Result<String, String> {
             let time = get_time_or_default(&parts, 2)?;
             Ok(format!("{} {} {} *", time, day, month))
         }
+        "every" => {
+            if parts.len() == 1 {
+                return Err(String::from("'Every' requires additional specification"));
+            }
+
+            // Check if it's a time pattern (e.g., "Every 9PM")
+            if parse_time_portion(parts[1]).is_ok() {
+                let time = get_time_or_default(&parts, 1)?;
+                return Ok(format!("{} * * *", time));
+            }
+
+            // Check if it's "Day"
+            if parts[1].to_lowercase() == "day" {
+                let time = get_time_or_default(&parts, 2)?;
+                return Ok(format!("{} * * *", time));
+            }
+
+            // Check if it's a weekday
+            if let Ok(weekday) = parse_weekday(parts[1]) {
+                let time = get_time_or_default(&parts, 2)?;
+                return Ok(format!("{} * * {}", time, weekday));
+            }
+
+            // Check if it's a month/day pattern (e.g., "Every 6/12")
+            if parts[1].contains('/') {
+                let (month, day) = parse_month_day(parts[1])?;
+                let time = get_time_or_default(&parts, 2)?;
+                return Ok(format!("{} {} {} *", time, day, month));
+            }
+
+            // Check if it's a monthly pattern: "Every <ordinal> of [the] Month [time]"
+            if let Some(day) = parse_ordinal_day(parts[1]) {
+                // Check for "of the Month" pattern
+                if parts.len() >= 5
+                    && parts[2].to_lowercase() == "of"
+                    && parts[3].to_lowercase() == "the"
+                    && parts[4].to_lowercase() == "month"
+                {
+                    let time = get_time_or_default(&parts, 5)?;
+                    return Ok(format!("{} {} * *", time, day));
+                }
+
+                // Check for "of Month" pattern
+                if parts.len() >= 4
+                    && parts[2].to_lowercase() == "of"
+                    && parts[3].to_lowercase() == "month"
+                {
+                    let time = get_time_or_default(&parts, 4)?;
+                    return Ok(format!("{} {} * *", time, day));
+                }
+
+                // If we have an ordinal but no valid month pattern, it's not a monthly pattern
+                // Fall through to check other patterns or return error
+            }
+
+            Err(format!("Unrecognized pattern after 'Every' in '{}'", s))
+        }
         _ => Err(format!("Unrecognized recurring time format: '{}'", s)),
     }
 }
@@ -430,6 +487,25 @@ mod tests {
             ("Yearly 2/14", "59 23 14 2 *"),
             ("Yearly 7/4 12PM", "0 12 4 7 *"),
             ("Yearly 12/25", "59 23 25 12 *"),
+            // Every - time patterns (maps to Daily)
+            ("Every 9PM", "0 21 * * *"),
+            ("Every 9:30AM", "30 9 * * *"),
+            ("Every Day", "59 23 * * *"),
+            ("Every Day 5PM", "0 17 * * *"),
+            // Every - weekday patterns (maps to Weekly)
+            ("Every Monday", "59 23 * * 1"),
+            ("Every Monday 5PM", "0 17 * * 1"),
+            ("Every Friday 3PM", "0 15 * * 5"),
+            // Every - ordinal day patterns (maps to Monthly)
+            ("Every 9th of the Month", "59 23 9 * *"),
+            ("Every 9th of Month", "59 23 9 * *"),
+            ("Every 15th of the Month 9AM", "0 9 15 * *"),
+            ("Every 1st of the Month", "59 23 1 * *"),
+            ("Every 1st of Month", "59 23 1 * *"),
+            ("Every 1st of the Month 10AM", "0 10 1 * *"),
+            // Every - month/day patterns (maps to Yearly)
+            ("Every 6/12", "59 23 12 6 *"),
+            ("Every 2/14 5PM", "0 17 14 2 *"),
         ];
 
         for (input, expected) in test_cases {
@@ -459,5 +535,14 @@ mod tests {
         assert!(parse_recurring_timestr("12/25").is_err());
         assert!(parse_recurring_timestr("February 14th").is_err());
         assert!(parse_recurring_timestr("July 4th").is_err());
+
+        // Invalid Every patterns
+        assert!(parse_recurring_timestr("Every").is_err());
+        assert!(parse_recurring_timestr("Every 1st").is_err()); // Must use "of the Month"
+        assert!(parse_recurring_timestr("Every 9th").is_err()); // Must use "of the Month"
+        assert!(parse_recurring_timestr("Every 15th 9AM").is_err()); // Must use "of the Month"
+        assert!(parse_recurring_timestr("Every InvalidDay").is_err());
+        assert!(parse_recurring_timestr("Every 32nd of the Month").is_err());
+        assert!(parse_recurring_timestr("Every 2/30").is_err()); // Invalid date
     }
 }
