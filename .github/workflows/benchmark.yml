@@ -41,6 +41,10 @@ jobs:
           sudo apt-get install -y bc
           cargo install hyperfine
 
-      - name: Run benchmarks
+      - name: Run basic benchmarks
         run: |
-          ./bench/github_workflow.sh
+          ./bench/github_workflow_basic.sh
+
+      - name: Run composite benchmarks
+        run: |
+          ./bench/github_workflow_composite.sh
