@@ -1,8 +1,14 @@
 # Changelog
 
+### v0.10.1
+- ✨ Added `every` keyword to recurring tasks/schedule
+- ⚡ Added performance benchmark for recurring tasks/records
+- 📝 Update documentation related to recurring tasks/records
+
 ### v0.10.0
 - ✨ Added recurring tasks and records for recurring tasks, use the same syntax but with a schedule, e.g. "Daily": `tascli task "write diary" daily`
-- ✨ Completing recurring task will create a recurring task record. The recurring task would show as completed if queried until the next interval.
+- ✨ Completing recurring task will create a recurring task record. The recurring task would show as completed if queried until the next interval
+- 📝 Update demo gif to include recurring tasks and records
 
 ### v0.9.0
 

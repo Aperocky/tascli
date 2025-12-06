@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 ./composite.sh >output_composite.txt 2>/dev/null
 
 declare -A standards
-standards["Task Creation"]=10
+standards["Regular Task Creation"]=10
 standards["Recurring Task Creation"]=10
 standards["List Tasks"]=15
 standards["Recurring Task Completion"]=10
