@@ -220,7 +220,12 @@ pub fn query_items(
 mod tests {
     use super::*;
     use crate::{
-        db::item::Item,
+        db::item::{
+            Item,
+            RECORD,
+            RECURRING_TASK_RECORD,
+            TASK,
+        },
         tests::{
             get_test_conn,
             insert_record,
@@ -312,7 +317,7 @@ mod tests {
         let item1_id = insert_item(&conn, &item1).unwrap();
         let item2 = get_test_item("task", "work", "meeting 2");
         let item2_id = insert_item(&conn, &item2).unwrap();
-        let item_query = ItemQuery::new().with_action("task");
+        let item_query = ItemQuery::new().with_action(TASK);
         let items = query_items(&conn, &item_query).unwrap();
         assert_eq!(items.len(), 2);
         delete_item(&conn, item2_id).expect("Unable to delete item");
@@ -333,7 +338,7 @@ mod tests {
             insert_task(&conn, "life", &format!("feeding{}", i), "today");
         }
 
-        let item_query = ItemQuery::new().with_action("task").with_category("work");
+        let item_query = ItemQuery::new().with_action(TASK).with_category("work");
         let work_items = query_items(&conn, &item_query);
         assert!(
             work_items.is_ok(),
@@ -343,16 +348,16 @@ mod tests {
         let work_items = work_items.unwrap();
         assert_eq!(work_items.len(), 5);
         for item in &work_items {
-            assert_eq!(item.action, "task");
+            assert_eq!(item.action, TASK);
             assert_eq!(item.category, "work");
             assert!(item.content.starts_with("meeting"));
         }
 
-        let item_query = ItemQuery::new().with_action("task").with_category("life");
+        let item_query = ItemQuery::new().with_action(TASK).with_category("life");
         let life_items = query_items(&conn, &item_query).unwrap();
         assert_eq!(life_items.len(), 3);
         for item in &life_items {
-            assert_eq!(item.action, "task");
+            assert_eq!(item.action, TASK);
             assert_eq!(item.category, "life");
             assert!(item.content.starts_with("feeding"));
         }
@@ -360,14 +365,14 @@ mod tests {
         let all_items = query_items(&conn, &ItemQuery::new()).unwrap();
         assert_eq!(all_items.len(), 8);
 
-        let task_items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        let task_items = query_items(&conn, &ItemQuery::new().with_action(TASK)).unwrap();
         assert_eq!(task_items.len(), 8);
 
-        let empty_items = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        let empty_items = query_items(&conn, &ItemQuery::new().with_action(RECORD)).unwrap();
         assert_eq!(empty_items.len(), 0);
 
         let limited_items =
-            query_items(&conn, &ItemQuery::new().with_action("task").with_limit(4)).unwrap();
+            query_items(&conn, &ItemQuery::new().with_action(TASK).with_limit(4)).unwrap();
         assert_eq!(limited_items.len(), 4);
     }
 
@@ -390,7 +395,7 @@ mod tests {
 
         let ongoing_tasks = query_items(
             &conn,
-            &ItemQuery::new().with_statuses(vec![0]).with_action("task"),
+            &ItemQuery::new().with_statuses(vec![0]).with_action(TASK),
         )
         .expect("Unable to execute query");
         assert_eq!(ongoing_tasks.len(), 4);
@@ -398,9 +403,7 @@ mod tests {
 
         let open_tasks = query_items(
             &conn,
-            &ItemQuery::new()
-                .with_statuses(vec![0, 6])
-                .with_action("task"),
+            &ItemQuery::new().with_statuses(vec![0, 6]).with_action(TASK),
         )
         .expect("Unable to execute query");
         assert_eq!(open_tasks.len(), 6);
@@ -412,7 +415,7 @@ mod tests {
             &conn,
             &ItemQuery::new()
                 .with_statuses(vec![1, 2, 3])
-                .with_action("task"),
+                .with_action(TASK),
         )
         .expect("Unable to execute query");
         assert_eq!(closed_tasks.len(), 4);
@@ -437,7 +440,7 @@ mod tests {
         let items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("task")
+                .with_action(TASK)
                 .with_limit(5)
                 .with_order_by("target_time"),
         )
@@ -450,7 +453,7 @@ mod tests {
         let next_items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("task")
+                .with_action(TASK)
                 .with_limit(5)
                 .with_offset(Offset::TargetTime(offset_target_time)),
         )
@@ -464,7 +467,7 @@ mod tests {
         let next_items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("task")
+                .with_action(TASK)
                 .with_limit(5)
                 .with_offset(Offset::TargetTime(offset_target_time)),
         )
@@ -488,7 +491,7 @@ mod tests {
         let items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("record")
+                .with_action(RECORD)
                 .with_limit(5)
                 .with_order_by("create_time"),
         )
@@ -500,7 +503,7 @@ mod tests {
         let next_items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("record")
+                .with_action(RECORD)
                 .with_limit(5)
                 .with_offset(Offset::CreateTime(last_item.create_time)),
         )
@@ -513,7 +516,7 @@ mod tests {
         let next_items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("record")
+                .with_action(RECORD)
                 .with_limit(5)
                 .with_offset(Offset::CreateTime(last_item.create_time)),
         )
@@ -536,7 +539,7 @@ mod tests {
         let final_item = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("record")
+                .with_action(RECORD)
                 .with_limit(10)
                 .with_offset(Offset::Id(10)),
         )
@@ -560,7 +563,7 @@ mod tests {
         let result = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("task")
+                .with_action(TASK)
                 .with_order_by("target_time"),
         )
         .unwrap();
@@ -619,13 +622,13 @@ mod tests {
             &conn,
             &ItemQuery::new()
                 .with_content_like("meeting")
-                .with_action("task"),
+                .with_action(TASK),
         )
         .unwrap();
         assert_eq!(task_meeting_items.len(), 3);
         for item in &task_meeting_items {
             assert!(item.content.contains("meeting"));
-            assert_eq!(item.action, "task");
+            assert_eq!(item.action, TASK);
         }
 
         // Test search that should return no results
@@ -655,34 +658,34 @@ mod tests {
         insert_recurring_record(&conn, "work", "Standup completed", task1_id, 2000);
 
         // Test single action (backward compatibility)
-        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        let records = query_items(&conn, &ItemQuery::new().with_action(RECORD)).unwrap();
         assert_eq!(records.len(), 2);
         for item in &records {
-            assert_eq!(item.action, "record");
+            assert_eq!(item.action, RECORD);
         }
 
         // Test multiple actions
         let all_records = query_items(
             &conn,
-            &ItemQuery::new().with_actions(vec!["record", "recurring_task_record"]),
+            &ItemQuery::new().with_actions(vec![RECORD, RECURRING_TASK_RECORD]),
         )
         .unwrap();
         assert_eq!(all_records.len(), 4);
         for item in &all_records {
-            assert!(item.action == "record" || item.action == "recurring_task_record");
+            assert!(item.action == RECORD || item.action == RECURRING_TASK_RECORD);
         }
 
         // Test multiple actions with category filter
         let work_records = query_items(
             &conn,
             &ItemQuery::new()
-                .with_actions(vec!["record", "recurring_task_record"])
+                .with_actions(vec![RECORD, RECURRING_TASK_RECORD])
                 .with_category("work"),
         )
         .unwrap();
         assert_eq!(work_records.len(), 2);
         for item in &work_records {
-            assert!(item.action == "record" || item.action == "recurring_task_record");
+            assert!(item.action == RECORD || item.action == RECURRING_TASK_RECORD);
             assert_eq!(item.category, "work");
         }
     }
@@ -704,7 +707,7 @@ mod tests {
         let records_for_task1 = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("recurring_task_record")
+                .with_action(RECURRING_TASK_RECORD)
                 .with_recurring_task_id(task1_id),
         )
         .unwrap();
@@ -716,7 +719,7 @@ mod tests {
         let records_for_task2 = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("recurring_task_record")
+                .with_action(RECURRING_TASK_RECORD)
                 .with_recurring_task_id(task2_id),
         )
         .unwrap();
@@ -727,7 +730,7 @@ mod tests {
         let records_after_1500 = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("recurring_task_record")
+                .with_action(RECURRING_TASK_RECORD)
                 .with_good_until_min(1500),
         )
         .unwrap();
@@ -736,7 +739,7 @@ mod tests {
         let records_before_2500 = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("recurring_task_record")
+                .with_action(RECURRING_TASK_RECORD)
                 .with_good_until_max(2500),
         )
         .unwrap();
@@ -746,7 +749,7 @@ mod tests {
         let records_in_range = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("recurring_task_record")
+                .with_action(RECURRING_TASK_RECORD)
                 .with_good_until_min(1000)
                 .with_good_until_max(2500),
         )
@@ -757,7 +760,7 @@ mod tests {
         let specific_records = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("recurring_task_record")
+                .with_action(RECURRING_TASK_RECORD)
                 .with_recurring_task_id(task1_id)
                 .with_good_until_min(1500),
         )

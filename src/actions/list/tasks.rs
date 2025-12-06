@@ -21,6 +21,9 @@ use crate::{
             Item,
             ItemQuery,
             Offset,
+            RECURRING_TASK,
+            RECURRING_TASK_RECORD,
+            TASK,
         },
     },
 };
@@ -98,7 +101,7 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
 // Some cmd query argument do not apply - moved to application layer.
 // Skip query for status because recurring tasks do not have status.
 fn query_recurring_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, String> {
-    let mut query = ItemQuery::new().with_action("recurring_task");
+    let mut query = ItemQuery::new().with_action(RECURRING_TASK);
     if let Some(cat) = &cmd.category {
         query = query.with_category(cat);
     }
@@ -163,7 +166,7 @@ fn mark_recurring_task_by_completion(
 
         // Query for recurring_task_record that covers this interval
         let record_query = ItemQuery::new()
-            .with_action("recurring_task_record")
+            .with_action(RECURRING_TASK_RECORD)
             .with_recurring_task_id(recurring_task_id)
             .with_good_until_min(last_occurrence);
         let records = query_items(conn, &record_query).map_err(|e| e.to_string())?;
@@ -173,7 +176,7 @@ fn mark_recurring_task_by_completion(
 }
 
 fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, String> {
-    let mut task_query = ItemQuery::new().with_action("task");
+    let mut task_query = ItemQuery::new().with_action(TASK);
     if let Some(t) = &cmd.timestr {
         let target_time_before = timestr::to_unix_epoch(t)?;
         task_query = task_query.with_target_time_max(target_time_before);

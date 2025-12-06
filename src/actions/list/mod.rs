@@ -2,16 +2,21 @@ mod records;
 mod tasks;
 
 pub use records::handle_listrecords;
-pub use tasks::handle_listtasks;
-
 use rusqlite::Connection;
+pub use tasks::handle_listtasks;
 
 use crate::{
     args::parser::ShowContentCommand,
     db::{
         cache,
         crud::get_item,
-        item::Offset,
+        item::{
+            Offset,
+            RECORD,
+            RECURRING_TASK,
+            RECURRING_TASK_RECORD,
+            TASK,
+        },
     },
 };
 
@@ -56,11 +61,11 @@ pub(crate) fn handle_next_page(conn: &Connection) -> Offset {
         Ok(item) => item,
         Err(_) => return Offset::None,
     };
-    if end_item.action == "task" {
+    if end_item.action == TASK {
         return Offset::TargetTime(end_item.target_time.unwrap());
-    } else if end_item.action == "recurring_task" {
+    } else if end_item.action == RECURRING_TASK {
         return Offset::Id(end_item.id.unwrap());
-    } else if end_item.action == "record" || end_item.action == "recurring_task_record" {
+    } else if end_item.action == RECORD || end_item.action == RECURRING_TASK_RECORD {
         return Offset::CreateTime(end_item.create_time);
     }
     Offset::None

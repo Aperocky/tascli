@@ -1,5 +1,9 @@
 use rusqlite::Connection;
 
+use super::{
+    handle_next_page,
+    CREATE_TIME_COL,
+};
 use crate::{
     actions::display,
     args::{
@@ -9,11 +13,15 @@ use crate::{
     db::{
         cache,
         crud::query_items,
-        item::{Item, ItemQuery, Offset},
+        item::{
+            Item,
+            ItemQuery,
+            Offset,
+            RECORD,
+            RECURRING_TASK_RECORD,
+        },
     },
 };
-
-use super::{handle_next_page, CREATE_TIME_COL};
 
 pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(), String> {
     let records = match query_records(conn, &cmd) {
@@ -42,7 +50,7 @@ pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(
 }
 
 fn query_records(conn: &Connection, cmd: &ListRecordCommand) -> Result<Vec<Item>, String> {
-    let mut record_query = ItemQuery::new().with_actions(vec!["record", "recurring_task_record"]);
+    let mut record_query = ItemQuery::new().with_actions(vec![RECORD, RECURRING_TASK_RECORD]);
     if let Some(cat) = &cmd.category {
         record_query = record_query.with_category(cat);
     }

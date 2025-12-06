@@ -11,7 +11,11 @@ use crate::{
     },
     db::{
         crud::insert_item,
-        item::Item,
+        item::{
+            Item,
+            RECORD,
+            TASK,
+        },
     },
 };
 
@@ -25,33 +29,29 @@ pub fn handle_taskcmd(conn: &Connection, cmd: &TaskCommand) -> Result<(), String
 
     match timestr::to_unix_epoch(&target_timestr) {
         Ok(target_time) => {
-            let new_task = Item::with_target_time("task".to_string(), category, content, Some(target_time));
+            let new_task =
+                Item::with_target_time(TASK.to_string(), category, content, Some(target_time));
             insert_item(conn, &new_task).map_err(|e| e.to_string())?;
 
             display::print_bold("Inserted Task:");
             display::print_items(&[new_task], false, false);
             Ok(())
         }
-        Err(_) => {
-            match timestr::parse_recurring_timestr(&target_timestr) {
-                Ok(cron_schedule) => {
-                    let new_recurring_task = Item::create_recurring_task(
-                        category,
-                        content,
-                        cron_schedule,
-                        target_timestr,
-                    );
-                    insert_item(conn, &new_recurring_task).map_err(|e| e.to_string())?;
+        Err(_) => match timestr::parse_recurring_timestr(&target_timestr) {
+            Ok(cron_schedule) => {
+                let new_recurring_task =
+                    Item::create_recurring_task(category, content, cron_schedule, target_timestr);
+                insert_item(conn, &new_recurring_task).map_err(|e| e.to_string())?;
 
-                    display::print_bold("Inserted Recurring Task:");
-                    display::print_items(&[new_recurring_task], false, false);
-                    Ok(())
-                }
-                Err(_) => {
-                    Err(format!("Could not parse '{}' as a valid time or recurring schedule", target_timestr))
-                }
+                display::print_bold("Inserted Recurring Task:");
+                display::print_items(&[new_recurring_task], false, false);
+                Ok(())
             }
-        }
+            Err(_) => Err(format!(
+                "Could not parse '{}' as a valid time or recurring schedule",
+                target_timestr
+            )),
+        },
     }
 }
 
@@ -64,9 +64,9 @@ pub fn handle_recordcmd(conn: &Connection, cmd: &RecordCommand) -> Result<(), St
     let new_record = match &cmd.timestr {
         Some(t) => {
             let create_time = timestr::to_unix_epoch(t)?;
-            Item::with_create_time("record".to_string(), category, content, create_time)
+            Item::with_create_time(RECORD.to_string(), category, content, create_time)
         }
-        None => Item::new("record".to_string(), category, content),
+        None => Item::new(RECORD.to_string(), category, content),
     };
 
     insert_item(conn, &new_record).map_err(|e| e.to_string())?;
@@ -82,7 +82,10 @@ mod tests {
     use crate::{
         db::{
             crud::query_items,
-            item::ItemQuery,
+            item::{
+                ItemQuery,
+                RECURRING_TASK,
+            },
         },
         tests::get_test_conn,
     };
@@ -96,9 +99,9 @@ mod tests {
         };
         let (conn, _temp_file) = get_test_conn();
         handle_taskcmd(&conn, &tc).unwrap();
-        let items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(TASK)).unwrap();
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].action, "task");
+        assert_eq!(items[0].action, TASK);
         assert_eq!(items[0].category, "default");
         assert_eq!(items[0].content, "complete testing of addition.rs");
     }
@@ -115,14 +118,14 @@ mod tests {
         let items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("task")
+                .with_action(TASK)
                 .with_category("fun")
                 .with_statuses(vec![0]),
         )
         .unwrap();
         let expected_target_time = timestr::to_unix_epoch("tomorrow").unwrap();
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].action, "task");
+        assert_eq!(items[0].action, TASK);
         assert_eq!(items[0].category, "fun");
         assert_eq!(items[0].content, "complete testing of addition.rs");
         assert_eq!(items[0].target_time, Some(expected_target_time));
@@ -140,12 +143,12 @@ mod tests {
         let items = query_items(
             &conn,
             &ItemQuery::new()
-                .with_action("record")
+                .with_action(RECORD)
                 .with_category("feeding"),
         )
         .unwrap();
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].action, "record");
+        assert_eq!(items[0].action, RECORD);
         assert_eq!(items[0].category, "feeding");
         assert_eq!(items[0].content, "100ML");
     }
@@ -175,7 +178,7 @@ mod tests {
         };
         handle_taskcmd(&conn, &monthly).unwrap();
 
-        let items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(RECURRING_TASK)).unwrap();
         assert_eq!(items.len(), 3);
 
         assert_eq!(items[0].content, "Daily standup");
@@ -185,7 +188,10 @@ mod tests {
 
         assert_eq!(items[1].content, "Weekly meeting");
         assert_eq!(items[1].cron_schedule, Some("0 14 * * 1-5".to_string()));
-        assert_eq!(items[1].human_schedule, Some("Weekly Monday-Friday 2PM".to_string()));
+        assert_eq!(
+            items[1].human_schedule,
+            Some("Weekly Monday-Friday 2PM".to_string())
+        );
 
         assert_eq!(items[2].content, "Monthly review");
         assert_eq!(items[2].cron_schedule, Some("59 23 1 * *".to_string()));
@@ -210,11 +216,12 @@ mod tests {
         };
         handle_taskcmd(&conn, &recurring_task).unwrap();
 
-        let regular_items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        let regular_items = query_items(&conn, &ItemQuery::new().with_action(TASK)).unwrap();
         assert_eq!(regular_items.len(), 1);
         assert_eq!(regular_items[0].content, "Finish report");
 
-        let recurring_items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        let recurring_items =
+            query_items(&conn, &ItemQuery::new().with_action(RECURRING_TASK)).unwrap();
         assert_eq!(recurring_items.len(), 1);
         assert_eq!(recurring_items[0].content, "Check emails");
     }

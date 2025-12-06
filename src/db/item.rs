@@ -31,8 +31,10 @@ pub struct Item {
     pub recurring_interval_complete: bool,
 }
 
-const RECURRING_TASK: &str = "recurring_task";
-const RECURRING_TASK_RECORD: &str = "recurring_task_record";
+pub const TASK: &str = "task";
+pub const RECORD: &str = "record";
+pub const RECURRING_TASK: &str = "recurring_task";
+pub const RECURRING_TASK_RECORD: &str = "recurring_task_record";
 
 impl Item {
     pub fn new(action: String, category: String, content: String) -> Self {
@@ -337,7 +339,7 @@ mod tests {
             "Weekly Monday 9AM".to_string(),
         );
 
-        assert_eq!(item.action, "recurring_task");
+        assert_eq!(item.action, RECURRING_TASK);
         assert_eq!(item.category, "work");
         assert_eq!(item.content, "Weekly standup");
         assert_eq!(item.cron_schedule, Some("0 9 * * 1".to_string()));
@@ -362,7 +364,7 @@ mod tests {
             good_until,
         );
 
-        assert_eq!(item.action, "recurring_task_record");
+        assert_eq!(item.action, RECURRING_TASK_RECORD);
         assert_eq!(item.category, "work");
         assert_eq!(item.content, "Weekly standup completed");
         assert_eq!(item.recurring_task_id, Some(recurring_task_id));
@@ -393,11 +395,11 @@ mod tests {
         assert_eq!(query.offset, Offset::None);
         assert_eq!(query.order_by, None);
 
-        let query = ItemQuery::new().with_action("task");
-        assert_eq!(query.actions, Some(vec!["task"]));
+        let query = ItemQuery::new().with_action(TASK);
+        assert_eq!(query.actions, Some(vec![TASK]));
 
-        let query = ItemQuery::new().with_actions(vec!["task", "record"]);
-        assert_eq!(query.actions, Some(vec!["task", "record"]));
+        let query = ItemQuery::new().with_actions(vec![TASK, RECORD]);
+        assert_eq!(query.actions, Some(vec![TASK, RECORD]));
 
         let query = ItemQuery::new().with_create_time_range(Some(1000), Some(2000));
         assert_eq!(query.create_time_min, Some(1000));
@@ -430,12 +432,12 @@ mod tests {
 
         // Test chaining
         let query = ItemQuery::new()
-            .with_action("record")
+            .with_action(RECORD)
             .with_category("feeding")
             .with_create_time_min(40000)
             .with_limit(100);
 
-        assert_eq!(query.actions, Some(vec!["record"]));
+        assert_eq!(query.actions, Some(vec![RECORD]));
         assert_eq!(query.category, Some("feeding"));
         assert_eq!(query.create_time_min, Some(40000));
         assert_eq!(query.create_time_max, None);
@@ -451,12 +453,12 @@ mod tests {
 
         // Test chaining with recurring task fields
         let query = ItemQuery::new()
-            .with_action("recurring_task_record")
+            .with_action(RECURRING_TASK_RECORD)
             .with_recurring_task_id(42)
             .with_good_until_min(10000)
             .with_good_until_max(20000);
 
-        assert_eq!(query.actions, Some(vec!["recurring_task_record"]));
+        assert_eq!(query.actions, Some(vec![RECURRING_TASK_RECORD]));
         assert_eq!(query.recurring_task_id, Some(42));
         assert_eq!(query.good_until_min, Some(10000));
         assert_eq!(query.good_until_max, Some(20000));

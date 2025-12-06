@@ -28,6 +28,9 @@ use crate::{
         item::{
             Item,
             ItemQuery,
+            RECORD,
+            RECURRING_TASK,
+            RECURRING_TASK_RECORD,
         },
     },
 };
@@ -38,11 +41,11 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     let status = cmd.status;
 
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
-    if item.action == "record" || item.action == "recurring_task_record" {
+    if item.action == RECORD || item.action == RECURRING_TASK_RECORD {
         return Err("Cannot complete a record".to_string());
     }
 
-    if item.action == "recurring_task" {
+    if item.action == RECURRING_TASK {
         let cron_schedule = item
             .cron_schedule
             .as_ref()
@@ -53,7 +56,7 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
         let existing_records = query_items(
             conn,
             &ItemQuery::new()
-                .with_action("recurring_task_record")
+                .with_action(RECURRING_TASK_RECORD)
                 .with_recurring_task_id(item.id.unwrap())
                 .with_good_until_min(last_occurrence),
         )
@@ -94,7 +97,7 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
 
     let completion_content = format!("Completed Task: {}", item.content);
     let completion_record = Item::new(
-        "record".to_string(),
+        RECORD.to_string(),
         item.category.clone(),
         completion_content,
     );
@@ -113,7 +116,7 @@ pub fn handle_deletecmd(conn: &Connection, cmd: &DeleteCommand) -> Result<(), St
     let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let item = get_item(conn, row_id).map_err(|e| format!("Failed to find item: {:?}", e))?;
     let item_type = item.action.clone();
-    let is_record = item_type == "record" || item_type == "recurring_task_record";
+    let is_record = item_type == RECORD || item_type == RECURRING_TASK_RECORD;
     display::print_items(&[item], is_record, false);
     let accept = prompt_yes_no(&format!(
         "Are you sure you want to delete this {}? ",
@@ -133,7 +136,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
 
-    if item.action == "recurring_task" {
+    if item.action == RECURRING_TASK {
         if cmd.status.is_some() {
             return Err("Cannot update status for recurring tasks".to_string());
         }
@@ -194,7 +197,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
 
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
 
-    let is_record = item.action == "record" || item.action == "recurring_task_record";
+    let is_record = item.action == RECORD || item.action == RECURRING_TASK_RECORD;
     let action = if is_record { "Record" } else { "Task" };
     display::print_bold(&format!("Updated {}:", action));
     display::print_items(&[item], is_record, false);
@@ -237,7 +240,10 @@ mod tests {
                 get_item,
                 query_items,
             },
-            item::ItemQuery,
+            item::{
+                ItemQuery,
+                TASK,
+            },
         },
         tests::{
             get_test_conn,
@@ -250,7 +256,7 @@ mod tests {
     fn test_handle_donecmd() {
         let (conn, _temp_file) = get_test_conn();
         insert_task(&conn, "work", "finish report", "tomorrow");
-        let items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(TASK)).unwrap();
         cache::store(&conn, &items).unwrap();
 
         let done_cmd = DoneCommand {
@@ -263,7 +269,7 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 1);
 
-        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        let records = query_items(&conn, &ItemQuery::new().with_action(RECORD)).unwrap();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].content, "Completed Task: finish report");
         assert_eq!(records[0].category, "work");
@@ -277,7 +283,7 @@ mod tests {
         let updated_item = get_item(&conn, item_id).unwrap();
         assert_eq!(updated_item.status, 2);
 
-        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        let records = query_items(&conn, &ItemQuery::new().with_action(RECORD)).unwrap();
         assert_eq!(records.len(), 2);
     }
 
@@ -285,7 +291,7 @@ mod tests {
     fn test_handle_donecmd_with_comment() {
         let (conn, _temp_file) = get_test_conn();
         insert_task(&conn, "work", "finish report", "tomorrow");
-        let items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(TASK)).unwrap();
         cache::store(&conn, &items).unwrap();
 
         let done_cmd = DoneCommand {
@@ -303,7 +309,7 @@ mod tests {
         );
         assert_eq!(updated_item.status, 1);
 
-        let records = query_items(&conn, &ItemQuery::new().with_action("record")).unwrap();
+        let records = query_items(&conn, &ItemQuery::new().with_action(RECORD)).unwrap();
         assert_eq!(records.len(), 1);
         assert_eq!(
             records[0].content,
@@ -316,7 +322,7 @@ mod tests {
     fn test_handle_updatecmd() {
         let (conn, _temp_file) = get_test_conn();
         insert_task(&conn, "home", "clean garage", "saturday");
-        let items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(TASK)).unwrap();
         cache::store(&conn, &items).unwrap();
         let item_id = cache::read(&conn, 1).unwrap().unwrap();
 
@@ -376,7 +382,7 @@ mod tests {
     fn test_handle_donecmd_recurring_task() {
         let (conn, _temp_file) = get_test_conn();
         let task_id = insert_recurring_task(&conn, "work", "Daily standup", "Daily 9AM");
-        let items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(RECURRING_TASK)).unwrap();
         cache::store(&conn, &items).unwrap();
 
         let done_cmd = DoneCommand {
@@ -387,11 +393,8 @@ mod tests {
         let result = handle_donecmd(&conn, &done_cmd);
         assert!(result.is_ok());
 
-        let records = query_items(
-            &conn,
-            &ItemQuery::new().with_action("recurring_task_record"),
-        )
-        .unwrap();
+        let records =
+            query_items(&conn, &ItemQuery::new().with_action(RECURRING_TASK_RECORD)).unwrap();
         assert_eq!(records.len(), 1);
         assert!(records[0]
             .content
@@ -413,11 +416,8 @@ mod tests {
             "This recurring task has already been completed for this iteration"
         );
 
-        let records = query_items(
-            &conn,
-            &ItemQuery::new().with_action("recurring_task_record"),
-        )
-        .unwrap();
+        let records =
+            query_items(&conn, &ItemQuery::new().with_action(RECURRING_TASK_RECORD)).unwrap();
         assert_eq!(records.len(), 1);
     }
 
@@ -425,7 +425,7 @@ mod tests {
     fn test_handle_updatecmd_recurring_task() {
         let (conn, _temp_file) = get_test_conn();
         let task_id = insert_recurring_task(&conn, "work", "Daily standup", "Daily 9AM");
-        let items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(RECURRING_TASK)).unwrap();
         cache::store(&conn, &items).unwrap();
 
         let update_cmd = UpdateCommand {
@@ -495,7 +495,7 @@ mod tests {
 
         // Test blocking regular task to recurring conversion
         insert_task(&conn, "work", "finish report", "tomorrow");
-        let items = query_items(&conn, &ItemQuery::new().with_action("task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(TASK)).unwrap();
         cache::store(&conn, &items).unwrap();
 
         let update_cmd = UpdateCommand {
@@ -513,7 +513,7 @@ mod tests {
         // Test blocking recurring task to regular conversion
         cache::clear(&conn).unwrap();
         insert_recurring_task(&conn, "work", "Daily standup", "Daily 9AM");
-        let items = query_items(&conn, &ItemQuery::new().with_action("recurring_task")).unwrap();
+        let items = query_items(&conn, &ItemQuery::new().with_action(RECURRING_TASK)).unwrap();
         cache::store(&conn, &items).unwrap();
 
         let update_cmd = UpdateCommand {
