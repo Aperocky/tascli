@@ -22,9 +22,9 @@ pub enum Action {
     Task(TaskCommand),
     /// add record
     Record(RecordCommand),
-    /// shortcut to complete tasks
+    /// complete task and generates a corresponding record entry
     Done(DoneCommand),
-    /// update task and record entries.
+    /// update task and record entries
     Update(UpdateCommand),
     /// delete task or record
     Delete(DeleteCommand),
@@ -112,9 +112,7 @@ pub enum ListCommand {
     Task(ListTaskCommand),
     /// list records
     Record(ListRecordCommand),
-    /// Show specific content from previous list command by index,
-    /// This allow the content to be displayed in non-table format,
-    /// Better for copy paste operations.
+    /// show specific listed item content directly for ease to copy
     Show(ShowContentCommand),
 }
 

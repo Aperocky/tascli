@@ -5,7 +5,7 @@
 [![benchmark](https://github.com/Aperocky/tascli/workflows/benchmark/badge.svg)](https://github.com/Aperocky/tascli/actions?query=workflow%3Abenchmark)
 ![Downloads](https://img.shields.io/crates/d/tascli.svg)
 
-A *simple, fast, local* CLI tool for tracking tasks and records from unix terminal.
+A *small (<2MB), simple, fast (<10ms), local* CLI tool for tracking tasks and records from unix terminal.
 
 Installation:
 
@@ -20,7 +20,7 @@ brew install tascli
 
 ## Basic Usage
 
-Tasks and records are stored in `~/.local/share/tascli/tascli.db` (configurable) with `rusqlite`.
+Tasks and records are stored in `~/.local/share/tascli/tascli.db` (configurable) with `sqlite3`.
 
 ### Tasks
 
