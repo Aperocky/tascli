@@ -36,7 +36,13 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
             return Ok(());
         }
     };
+
     let recurring_hit_limit = recurring_tasks.len() == cmd.limit;
+    let last_queried_recurring = if recurring_hit_limit {
+        recurring_tasks.last().cloned()
+    } else {
+        None
+    };
 
     // Mark completion status for all recurring tasks
     let recurring_tasks = mark_recurring_task_by_completion(conn, recurring_tasks)?;
@@ -85,11 +91,22 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
         return Ok(());
     }
 
+    // given we have filtering, the cache must store
+    // all items queried even if they had been filtered
+    let mut cache_items = all_tasks.clone();
+    if recurring_hit_limit {
+        if let Some(last_queried) = &last_queried_recurring {
+            if all_tasks.last().map(|t| t.id) != Some(last_queried.id) {
+                cache_items.push(last_queried.clone());
+            }
+        }
+    }
+
     cache::clear(conn).map_err(|e| e.to_string())?;
-    if all_tasks.len() == cmd.limit {
-        cache::store_with_next(conn, &all_tasks)
+    if recurring_hit_limit || cache_items.len() == cmd.limit {
+        cache::store_with_next(conn, &cache_items)
     } else {
-        cache::store(conn, &all_tasks)
+        cache::store(conn, &cache_items)
     }
     .map_err(|e| e.to_string())?;
 
@@ -210,6 +227,7 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
         offset = handle_next_page(conn);
         match offset {
             Offset::TargetTime(_) => {}
+            Offset::Id(_) => offset = Offset::None, // Transition from recurring to regular tasks
             Offset::None => return Err("No next page available".to_string()),
             _ => return Ok(Vec::new()), // Wrong offset type, skip regular tasks query
         }
@@ -509,28 +527,91 @@ mod tests {
     fn test_list_tasks_pagination_with_recurring() {
         let (conn, _temp_file) = get_test_conn();
 
-        // Insert many recurring tasks to trigger pagination
-        for i in 1..=15 {
-            insert_recurring_task(&conn, "work", &format!("Task {}", i), "Daily 9AM");
-        }
+        // Insert 5 recurring tasks
+        insert_recurring_task(&conn, "work", "Task 1", "Daily 9AM");
+        let task2_id = insert_recurring_task(&conn, "work", "Task 2", "Daily 10AM");
+        insert_recurring_task(&conn, "work", "Task 3", "Daily 11AM");
+        let task4_id = insert_recurring_task(&conn, "work", "Task 4", "Daily 12PM");
+        insert_recurring_task(&conn, "work", "Task 5", "Daily 1PM");
 
-        // Insert regular tasks
-        for i in 1..=5 {
-            insert_task(&conn, "work", &format!("Regular task {}", i), "tomorrow");
-        }
+        // Mark tasks 2 and 4 as complete
+        let future_time = Local::now().timestamp() + 86400;
+        insert_recurring_record(&conn, "work", "Task 2 done", task2_id, future_time);
+        insert_recurring_record(&conn, "work", "Task 4 done", task4_id, future_time);
 
-        // Query with small limit
+        // First page: Query incomplete tasks with limit 2
+        // Should query tasks 1-2, filter out task 2, display task 1
         let cmd = ListTaskCommand {
-            limit: 10,
-            status: 0,
+            limit: 2,
+            status: 0, // incomplete only
             ..ListTaskCommand::default_test()
         };
 
         let result = handle_listtasks(&conn, cmd);
         assert!(result.is_ok());
-
-        // Verify cache was populated (when recurring tasks hit limit, we don't query regular tasks)
         assert!(cache::validate_cache(&conn).unwrap());
+
+        // Second page: Should query tasks 3-4, filter out task 4, display task 3
+        let cmd_next = ListTaskCommand {
+            limit: 2,
+            status: 0,
+            next_page: true,
+            ..ListTaskCommand::default_test()
+        };
+
+        let result = handle_listtasks(&conn, cmd_next);
+        assert!(result.is_ok());
+        assert!(cache::validate_cache(&conn).unwrap());
+    }
+
+    #[test]
+    fn test_pagination_transition_recurring_to_regular() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Insert 3 recurring tasks and 5 regular tasks
+        insert_recurring_task(&conn, "work", "Recurring 1", "Daily 9AM");
+        insert_recurring_task(&conn, "work", "Recurring 2", "Daily 10AM");
+        insert_recurring_task(&conn, "work", "Recurring 3", "Daily 11AM");
+
+        for i in 1..=5 {
+            insert_task(&conn, "work", &format!("Regular task {}", i), "tomorrow");
+        }
+
+        // First page: limit=2, should get 2 recurring tasks
+        let cmd = ListTaskCommand {
+            limit: 2,
+            status: 255, // all
+            ..ListTaskCommand::default_test()
+        };
+        let result = handle_listtasks(&conn, cmd);
+        assert!(result.is_ok());
+
+        // Second page: should get last recurring + first regular (transition page)
+        let cmd_next = ListTaskCommand {
+            limit: 2,
+            status: 255,
+            next_page: true,
+            ..ListTaskCommand::default_test()
+        };
+        let recurring_and_regular = query_recurring_tasks(&conn, &cmd_next).unwrap();
+        let regular_tasks = query_tasks(&conn, &cmd_next).unwrap();
+
+        // Should have 1 recurring task left (Recurring 3)
+        assert_eq!(recurring_and_regular.len(), 1);
+        assert_eq!(recurring_and_regular[0].content, "Recurring 3");
+
+        // Should start getting regular tasks (didn't hit recurring limit)
+        assert!(regular_tasks.len() > 0);
+
+        // Third page: should transition to regular tasks (not "No tasks found")
+        let cmd_next = ListTaskCommand {
+            limit: 2,
+            status: 255,
+            next_page: true,
+            ..ListTaskCommand::default_test()
+        };
+        let result = handle_listtasks(&conn, cmd_next);
+        assert!(result.is_ok()); // Should succeed and show regular tasks
     }
 
     #[test]

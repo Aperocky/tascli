@@ -1,6 +1,6 @@
 [package]
 name = "tascli"
-version = "0.10.1"
+version = "0.10.2"
 edition = "2024"
 description = "A simple CLI tool for tracking tasks and records from terminal"
 license = "MIT"
