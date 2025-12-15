@@ -1,5 +1,9 @@
 # Changelog
 
+### v0.10.2
+- 🐛 Fix bug where pagination do not continue correctly from recurring after filtering and from recurring to regular tasks
+- 📝 Minor readme and help string update
+
 ### v0.10.1
 - ✨ Added `every` keyword to recurring tasks/schedule
 - ⚡ Added performance benchmark for recurring tasks/records
