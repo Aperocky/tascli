@@ -1,0 +1,68 @@
+<svg width="400" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4299e1;stop-opacity:1" />
+    </linearGradient>
+
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Main container -->
+  <rect x="30" y="30" width="340" height="140" rx="25" fill="#1a202c" filter="url(#shadow)"/>
+
+  <!-- Terminal prompt symbol - aligned with top row -->
+  <g transform="translate(55, 48)">
+    <path d="M 0,0 L 30,22 L 0,44 L 10,44 L 40,22 L 10,0 Z"
+          fill="url(#mainGradient)"/>
+  </g>
+
+  <!-- "tascli" text - vertically centered around the 2nd row -->
+  <text x="55" y="138"
+        font-family="'Courier New', monospace"
+        font-size="28"
+        font-weight="bold"
+        fill="#e2e8f0"
+        text-anchor="start">
+    tascli
+  </text>
+
+  <!-- 3 wide x 2 tall grid -->
+  <g transform="translate(180, 48)">
+    <!-- Row 0 -->
+    <!-- (0,0) - Done task with checkmark -->
+    <rect x="0" y="0" width="48" height="48" rx="6" fill="#48bb78"/>
+    <polyline points="13,24 21,32 35,16"
+              stroke="white"
+              stroke-width="3.5"
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"/>
+    <!-- (0,1) - In Progress task with lines -->
+    <rect x="56" y="0" width="48" height="48" rx="6" fill="#ed8936"/>
+    <line x1="63" y1="18" x2="97" y2="18" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <line x1="63" y1="26" x2="88" y2="26" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <line x1="63" y1="34" x2="94" y2="34" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <!-- (0,2) - Number 24 -->
+    <rect x="112" y="0" width="48" height="48" rx="6" fill="#2d3748"/>
+    <text x="136" y="32" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#4299e1" text-anchor="middle">24</text>
+
+    <!-- Row 1 -->
+    <!-- (1,0) - Records symbol (document/list icon) -->
+    <rect x="0" y="56" width="48" height="48" rx="6" fill="#9f7aea"/>
+    <rect x="12" y="68" width="24" height="28" rx="2" fill="none" stroke="white" stroke-width="2.5"/>
+    <line x1="17" y1="75" x2="31" y2="75" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <line x1="17" y1="81" x2="28" y2="81" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <line x1="17" y1="87" x2="30" y2="87" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <!-- (1,1) - Urgent/Due task with clock -->
+    <rect x="56" y="56" width="48" height="48" rx="6" fill="#f56565"/>
+    <circle cx="80" cy="80" r="13" fill="none" stroke="white" stroke-width="2.5"/>
+    <line x1="80" y1="80" x2="80" y2="71" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="80" y1="80" x2="87" y2="80" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- (1,2) - Number 7 -->
+    <rect x="112" y="56" width="48" height="48" rx="6" fill="#2d3748"/>
+    <text x="136" y="88" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#4299e1" text-anchor="middle">7</text>
+  </g>
+</svg>

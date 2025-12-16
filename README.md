@@ -20,7 +20,7 @@ brew install tascli
 
 ## Basic Usage
 
-Tasks and records are stored in `~/.local/share/tascli/tascli.db` (configurable) with `sqlite3`.
+Tasks and records are stored in `~/.local/share/tascli/tascli.db` (configurable) with `sqlite`.
 
 ### Tasks
 
