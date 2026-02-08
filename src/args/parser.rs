@@ -31,6 +31,9 @@ pub enum Action {
     /// list tasks or records
     #[command(subcommand)]
     List(ListCommand),
+    /// operations and statistics
+    #[command(subcommand)]
+    Ops(OpsCommand),
 }
 
 #[derive(Debug, Args)]
@@ -116,6 +119,14 @@ pub enum ListCommand {
     Show(ShowContentCommand),
 }
 
+#[derive(Debug, Subcommand)]
+pub enum OpsCommand {
+    /// list statistics
+    Stat(OpsStatCommand),
+    /// batch update tasks and records
+    Batch(OpsBatchCommand),
+}
+
 #[derive(Debug, Args)]
 pub struct ListTaskCommand {
     /// task due time. e.g. today,
@@ -182,6 +193,57 @@ pub struct ShowContentCommand {
     /// index from previous list command
     #[arg(value_parser = validate_index)]
     pub index: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct OpsStatCommand {
+    /// type of actions to stat - default all, but can be task, record or recurring and active
+    #[arg(short, long, default_value_t = String::from("all"))]
+    pub action: String,
+    /// specify a particular category to stat
+    #[arg(short, long)]
+    pub category: Option<String>,
+    /// Starting time of the statistic operation
+    /// if this is date only, then it is non-inclusive
+    #[arg(short, long, value_parser = validate_timestr)]
+    pub starting_time: Option<String>,
+    /// End time of the statistic operation
+    /// if this is date only, then it is inclusive
+    #[arg(short, long, value_parser = validate_timestr)]
+    pub ending_time: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct OpsBatchCommand {
+    /// type of actions for update operation to run on - all or task or record; For all, only
+    /// modifying category is supported
+    #[arg(short, long, default_value_t = String::from("all"))]
+    pub action: String,
+    /// category of the selection at current time
+    #[arg(short, long)]
+    pub category: Option<String>,
+    /// Starting time of the current selection
+    /// if this is date only, then it is non-inclusive
+    #[arg(short, long, value_parser = validate_timestr)]
+    pub starting_time: Option<String>,
+    /// End time of the current selection
+    /// if this is date only, then it is inclusive
+    #[arg(short, long, value_parser = validate_timestr)]
+    pub ending_time: Option<String>,
+    /// modify the current selection to this category
+    #[arg(short = 't', long)]
+    pub category_to: Option<String>,
+    /// modify the tasks selected to this status
+    /// only work with action:task
+    /// accept ongoing|done|cancelled|duplicate|suspended|pending
+    #[arg(short, long, value_parser = parse_status)]
+    pub status: Option<u8>,
+    /// delete the selection in question
+    #[arg(short, long, default_value_t = false)]
+    pub delete: bool,
+    /// interactively process task by task
+    #[arg(short, long, default_value_t = false)]
+    pub interactive: bool,
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
