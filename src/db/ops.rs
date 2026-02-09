@@ -187,7 +187,6 @@ pub fn batch_delete_items(
 
 pub fn get_stats(
     conn: &Connection,
-    actions: Option<Vec<&str>>,
     category: Option<&str>,
     create_time_min: Option<i64>,
     create_time_max: Option<i64>,
@@ -195,7 +194,7 @@ pub fn get_stats(
     target_time_max: Option<i64>,
 ) -> Result<StatTable> {
     let (where_clause, params) = build_batch_where_clause(
-        actions,
+        None, // Always include all action types for stats
         category,
         create_time_min,
         create_time_max,
@@ -683,7 +682,7 @@ mod tests {
         insert_recurring_record(&conn, "work", "standup done", rt_id, 1000);
 
         // Test 1: Get all stats
-        let stats = get_stats(&conn, None, None, None, None, None, None).expect("get_stats failed");
+        let stats = get_stats(&conn, None, None, None, None, None).expect("get_stats failed");
 
         assert_eq!(stats.rows.len(), 2);
 
@@ -714,7 +713,7 @@ mod tests {
         assert_eq!(stats.totals.total, 8);
 
         // Test 2: Filter by category
-        let stats = get_stats(&conn, None, Some("work"), None, None, None, None)
+        let stats = get_stats(&conn, Some("work"), None, None, None, None)
             .expect("get_stats failed");
 
         assert_eq!(stats.rows.len(), 1);
@@ -722,16 +721,7 @@ mod tests {
         assert_eq!(stats.rows[0].total, 5);
         assert_eq!(stats.totals.total, 5);
 
-        // Test 3: Filter by action
-        let stats = get_stats(&conn, Some(vec![TASK]), None, None, None, None, None)
-            .expect("get_stats failed");
-
-        assert_eq!(stats.rows.len(), 2);
-        assert_eq!(stats.totals.task, 3);
-        assert_eq!(stats.totals.record, 0);
-        assert_eq!(stats.totals.total, 3);
-
-        // Test 4: Filter by time range
+        // Test 3: Filter by time range
         let time_500 = 500;
         let time_1500 = 1500;
         let item1 = Item::with_create_time(RECORD.to_string(), "early".to_string(), "early rec".to_string(), time_500);
@@ -739,7 +729,7 @@ mod tests {
         let item2 = Item::with_create_time(RECORD.to_string(), "later".to_string(), "later rec".to_string(), time_1500);
         insert_item(&conn, &item2).expect("insert failed");
 
-        let stats = get_stats(&conn, None, None, Some(1000), None, None, None)
+        let stats = get_stats(&conn, None, Some(1000), None, None, None)
             .expect("get_stats failed");
 
         let later_row = stats.rows.iter().find(|r| r.category == "later");
@@ -749,8 +739,8 @@ mod tests {
         let early_row = stats.rows.iter().find(|r| r.category == "early");
         assert!(early_row.is_none());
 
-        // Test 5: No results
-        let stats = get_stats(&conn, None, Some("nonexistent"), None, None, None, None)
+        // Test 4: No results
+        let stats = get_stats(&conn, Some("nonexistent"), None, None, None, None)
             .expect("get_stats failed");
 
         assert_eq!(stats.rows.len(), 0);

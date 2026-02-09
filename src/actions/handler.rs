@@ -5,6 +5,7 @@ use crate::{
         addition,
         list,
         modify,
+        ops,
     },
     args::parser::{
         Action,
@@ -27,7 +28,7 @@ pub fn handle_commands(conn: &Connection, args: CliArgs) -> Result<(), String> {
             ListCommand::Show(cmd) => list::handle_showcontent(conn, cmd),
         },
         Action::Ops(ops_cmd) => match ops_cmd {
-            OpsCommand::Stat(_) => Err("ops stat not yet implemented".to_string()),
+            OpsCommand::Stat(cmd) => ops::handle_statcmd(conn, &cmd),
             OpsCommand::Batch(_) => Err("ops batch not yet implemented".to_string()),
         },
     }

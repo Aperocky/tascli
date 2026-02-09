@@ -197,9 +197,6 @@ pub struct ShowContentCommand {
 
 #[derive(Debug, Args)]
 pub struct OpsStatCommand {
-    /// type of actions to stat - default all, but can be task, record or recurring and active
-    #[arg(short, long, default_value_t = String::from("all"))]
-    pub action: String,
     /// specify a particular category to stat
     #[arg(short, long)]
     pub category: Option<String>,
