@@ -23,6 +23,22 @@ pub struct ItemUpdates {
     pub target_time: Option<i64>,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct StatRow {
+    pub category: String,
+    pub task: usize,
+    pub record: usize,
+    pub recurring_task: usize,
+    pub recurring_task_record: usize,
+    pub total: usize,
+}
+
+#[derive(Debug)]
+pub struct StatTable {
+    pub rows: Vec<StatRow>,
+    pub totals: StatRow,
+}
+
 const VALID_ORDER_COLUMNS: &[&str] = &["id", "create_time", "target_time"];
 
 pub fn insert_item(conn: &Connection, item: &Item) -> Result<i64> {
@@ -367,6 +383,92 @@ pub fn batch_delete_items(
     let affected = conn.execute(&query, params_from_iter(params))?;
 
     Ok(affected)
+}
+
+pub fn get_stats(
+    conn: &Connection,
+    actions: Option<Vec<&str>>,
+    category: Option<&str>,
+    create_time_min: Option<i64>,
+    create_time_max: Option<i64>,
+    target_time_min: Option<i64>,
+    target_time_max: Option<i64>,
+) -> Result<StatTable> {
+    let (where_clause, params) = build_batch_where_clause(
+        actions,
+        category,
+        create_time_min,
+        create_time_max,
+        target_time_min,
+        target_time_max,
+        None, // statuses not used for stats
+    );
+
+    let query = format!(
+        "SELECT category, action, COUNT(*) as count FROM items{} GROUP BY category, action ORDER BY category, action",
+        where_clause
+    );
+
+    let mut stmt = conn.prepare(&query)?;
+    let rows = stmt.query_map(params_from_iter(params), |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, usize>(2)?,
+        ))
+    })?;
+
+    use std::collections::HashMap;
+    let mut data: HashMap<String, HashMap<String, usize>> = HashMap::new();
+
+    for row_result in rows {
+        let (cat, action, count) = row_result?;
+        data.entry(cat).or_insert_with(HashMap::new).insert(action, count);
+    }
+
+    let mut stat_rows = Vec::new();
+    let mut total_task = 0;
+    let mut total_record = 0;
+    let mut total_recurring_task = 0;
+    let mut total_recurring_task_record = 0;
+
+    for (cat, actions_map) in data.iter() {
+        let task = *actions_map.get("task").unwrap_or(&0);
+        let record = *actions_map.get("record").unwrap_or(&0);
+        let recurring_task = *actions_map.get("recurring_task").unwrap_or(&0);
+        let recurring_task_record = *actions_map.get("recurring_task_record").unwrap_or(&0);
+        let row_total = task + record + recurring_task + recurring_task_record;
+
+        total_task += task;
+        total_record += record;
+        total_recurring_task += recurring_task;
+        total_recurring_task_record += recurring_task_record;
+
+        stat_rows.push(StatRow {
+            category: cat.clone(),
+            task,
+            record,
+            recurring_task,
+            recurring_task_record,
+            total: row_total,
+        });
+    }
+
+    stat_rows.sort_by(|a, b| b.total.cmp(&a.total));
+
+    let totals = StatRow {
+        category: "TOTAL".to_string(),
+        task: total_task,
+        record: total_record,
+        recurring_task: total_recurring_task,
+        recurring_task_record: total_recurring_task_record,
+        total: total_task + total_record + total_recurring_task + total_recurring_task_record,
+    };
+
+    Ok(StatTable {
+        rows: stat_rows,
+        totals,
+    })
 }
 
 #[cfg(test)]
@@ -1294,5 +1396,94 @@ mod tests {
             .expect("query failed");
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].status, 0);
+    }
+
+    #[test]
+    fn test_get_stats() {
+        let (conn, _temp_file) = get_test_conn();
+
+        // Insert test data
+        insert_task(&conn, "work", "task 1", "today");
+        insert_task(&conn, "work", "task 2", "today");
+        insert_task(&conn, "personal", "task 3", "today");
+        insert_record(&conn, "work", "record 1", "yesterday");
+        insert_record(&conn, "personal", "record 2", "yesterday");
+        insert_record(&conn, "personal", "record 3", "yesterday");
+        let rt_id = insert_recurring_task(&conn, "work", "standup", "Daily 9AM");
+        insert_recurring_record(&conn, "work", "standup done", rt_id, 1000);
+
+        // Test 1: Get all stats
+        let stats = get_stats(&conn, None, None, None, None, None, None).expect("get_stats failed");
+
+        assert_eq!(stats.rows.len(), 2);
+
+        // Verify sorted by total descending
+        assert_eq!(stats.rows[0].category, "work");
+        assert_eq!(stats.rows[0].total, 5);
+        assert_eq!(stats.rows[1].category, "personal");
+        assert_eq!(stats.rows[1].total, 3);
+
+        let personal_row = stats.rows.iter().find(|r| r.category == "personal").unwrap();
+        assert_eq!(personal_row.task, 1);
+        assert_eq!(personal_row.record, 2);
+        assert_eq!(personal_row.recurring_task, 0);
+        assert_eq!(personal_row.recurring_task_record, 0);
+        assert_eq!(personal_row.total, 3);
+
+        let work_row = stats.rows.iter().find(|r| r.category == "work").unwrap();
+        assert_eq!(work_row.task, 2);
+        assert_eq!(work_row.record, 1);
+        assert_eq!(work_row.recurring_task, 1);
+        assert_eq!(work_row.recurring_task_record, 1);
+        assert_eq!(work_row.total, 5);
+
+        assert_eq!(stats.totals.task, 3);
+        assert_eq!(stats.totals.record, 3);
+        assert_eq!(stats.totals.recurring_task, 1);
+        assert_eq!(stats.totals.recurring_task_record, 1);
+        assert_eq!(stats.totals.total, 8);
+
+        // Test 2: Filter by category
+        let stats = get_stats(&conn, None, Some("work"), None, None, None, None)
+            .expect("get_stats failed");
+
+        assert_eq!(stats.rows.len(), 1);
+        assert_eq!(stats.rows[0].category, "work");
+        assert_eq!(stats.rows[0].total, 5);
+        assert_eq!(stats.totals.total, 5);
+
+        // Test 3: Filter by action
+        let stats = get_stats(&conn, Some(vec![TASK]), None, None, None, None, None)
+            .expect("get_stats failed");
+
+        assert_eq!(stats.rows.len(), 2);
+        assert_eq!(stats.totals.task, 3);
+        assert_eq!(stats.totals.record, 0);
+        assert_eq!(stats.totals.total, 3);
+
+        // Test 4: Filter by time range
+        let time_500 = 500;
+        let time_1500 = 1500;
+        let item1 = Item::with_create_time(RECORD.to_string(), "early".to_string(), "early rec".to_string(), time_500);
+        insert_item(&conn, &item1).expect("insert failed");
+        let item2 = Item::with_create_time(RECORD.to_string(), "later".to_string(), "later rec".to_string(), time_1500);
+        insert_item(&conn, &item2).expect("insert failed");
+
+        let stats = get_stats(&conn, None, None, Some(1000), None, None, None)
+            .expect("get_stats failed");
+
+        let later_row = stats.rows.iter().find(|r| r.category == "later");
+        assert!(later_row.is_some());
+        assert_eq!(later_row.unwrap().record, 1);
+
+        let early_row = stats.rows.iter().find(|r| r.category == "early");
+        assert!(early_row.is_none());
+
+        // Test 5: No results
+        let stats = get_stats(&conn, None, Some("nonexistent"), None, None, None, None)
+            .expect("get_stats failed");
+
+        assert_eq!(stats.rows.len(), 0);
+        assert_eq!(stats.totals.total, 0);
     }
 }
