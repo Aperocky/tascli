@@ -123,7 +123,7 @@ pub enum ListCommand {
 pub enum OpsCommand {
     /// list statistics
     Stat(OpsStatCommand),
-    /// batch update tasks and records
+    /// batch update tasks and records, will only proceed after verification.
     Batch(OpsBatchCommand),
 }
 
@@ -238,6 +238,10 @@ pub struct OpsBatchCommand {
     /// accept ongoing|done|cancelled|duplicate|suspended|pending
     #[arg(short, long, value_parser = parse_status)]
     pub status: Option<u8>,
+    /// update the due date of tasks
+    /// only work with action:task
+    #[arg(short, long, value_parser = validate_timestr)]
+    pub target_time: Option<String>,
     /// delete the selection in question
     #[arg(short, long, default_value_t = false)]
     pub delete: bool,
