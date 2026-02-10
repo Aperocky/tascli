@@ -1,5 +1,11 @@
 # Changelog
 
+### v0.11.0
+- ✨ Added `ops` commands for operations and visibility
+- ✨ `ops stat` to have a holistic view of all of your tasks, records and recurring ones by category and time.
+- ✨ `ops batch` to batch update categories, status and due dates.
+- ✨ `ops backup` to backup your table (convenience function), also backups automatically for batch commands
+
 ### v0.10.2
 - 🐛 Fix bug where pagination do not continue correctly from recurring after filtering and from recurring to regular tasks
 - 📝 Minor readme and help string update
