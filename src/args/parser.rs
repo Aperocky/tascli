@@ -125,6 +125,8 @@ pub enum OpsCommand {
     Stat(OpsStatCommand),
     /// batch update tasks and records, will only proceed after verification.
     Batch(OpsBatchCommand),
+    /// backup database to specified path or default location
+    Backup(OpsBackupCommand),
 }
 
 #[derive(Debug, Args)]
@@ -246,6 +248,16 @@ pub struct OpsBatchCommand {
     /// only work with action:task
     #[arg(long, value_parser = validate_timestr)]
     pub target_time_to: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct OpsBackupCommand {
+    /// destination path for backup file;
+    /// if directory, creates tascli_bak.db inside;
+    /// if file path, copies to that path;
+    /// if omitted, creates tascli_bak.db in same directory as original.
+    #[arg(short, long)]
+    pub path: Option<String>,
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {

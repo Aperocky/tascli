@@ -48,9 +48,8 @@ fn get_config_data_dir(home_dir: PathBuf) -> Option<String> {
     }
 }
 
-fn str_to_pathbuf(dir_path: String) -> Result<PathBuf, String> {
+pub fn str_to_pathbuf(dir_path: String) -> Result<PathBuf, String> {
     if dir_path.starts_with("~") {
-        // We have already executed home_dir previously
         let mut path_buf = home::home_dir().unwrap();
         if dir_path.len() > 2 && dir_path.starts_with("~/") {
             path_buf.push(&dir_path[2..]);
@@ -59,7 +58,7 @@ fn str_to_pathbuf(dir_path: String) -> Result<PathBuf, String> {
     } else if dir_path.starts_with("/") {
         Ok(PathBuf::from(dir_path))
     } else {
-        Err(format!("data directory must be absolute or home relative, and start with '~' or '/', it cannot be {}", dir_path))
+        Err(format!("path must be absolute or home relative, starting with '~' or '/', got: {}", dir_path))
     }
 }
 
@@ -68,24 +67,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_str_to_pathbuf_with_tilde() {
-        // Test with just "~"
-        let result = str_to_pathbuf("~".to_string()).unwrap();
-        let expected = home::home_dir().unwrap();
-        assert_eq!(result, expected);
+    fn test_str_to_pathbuf() {
+        let home = home::home_dir().unwrap();
 
-        let result = str_to_pathbuf("~/".to_string()).unwrap();
-        let expected = home::home_dir().unwrap();
-        assert_eq!(result, expected);
+        assert_eq!(str_to_pathbuf("~".to_string()).unwrap(), home);
+        assert_eq!(str_to_pathbuf("~/".to_string()).unwrap(), home);
+        assert_eq!(str_to_pathbuf("~/some/path".to_string()).unwrap(), home.join("some").join("path"));
+        assert_eq!(str_to_pathbuf("/absolute/path".to_string()).unwrap(), PathBuf::from("/absolute/path"));
 
-        let result = str_to_pathbuf("~/some/path".to_string()).unwrap();
-        let expected = home::home_dir().unwrap().join("some").join("path");
-        assert_eq!(result, expected);
-
-        let result = str_to_pathbuf("some/relative/path".to_string());
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("must be absolute or home relative"));
+        let err = str_to_pathbuf("relative/path".to_string()).unwrap_err();
+        assert!(err.contains("path must be absolute or home relative"));
     }
 }
