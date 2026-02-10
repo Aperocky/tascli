@@ -111,7 +111,7 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
     .map_err(|e| e.to_string())?;
 
     display::print_bold("Tasks List:");
-    display::print_items(&all_tasks, false, true);
+    display::print_items(&all_tasks, true);
     Ok(())
 }
 

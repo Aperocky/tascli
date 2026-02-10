@@ -70,12 +70,7 @@ pub fn handle_batchcmd(conn: &Connection, cmd: &OpsBatchCommand) -> Result<(), S
 
     // Display items that will be affected
     display::print_bold(&format!("Found {} items matching filters:", items.len()));
-    // Determine if items are records or tasks for display
-    let has_records = items.iter().any(|i| i.action == "record" || i.action == "recurring_task_record");
-    let has_tasks = items.iter().any(|i| i.action == "task" || i.action == "recurring_task");
-
-    // Display appropriately (if mixed, show as tasks since display format works for both)
-    display::print_items(&items, has_records && !has_tasks, false);
+    display::print_items(&items, true);
 
     // Show what operation will be performed
     println!();

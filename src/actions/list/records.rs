@@ -45,7 +45,7 @@ pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(
     .map_err(|e| e.to_string())?;
 
     display::print_bold("Records List:");
-    display::print_items(&records, true, true);
+    display::print_items(&records, true);
     Ok(())
 }
 

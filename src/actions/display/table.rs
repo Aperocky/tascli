@@ -11,7 +11,7 @@ use unicode_width::{
 
 use crate::actions::display::DisplayRow;
 
-pub fn print_table(rows: &[DisplayRow], is_record: bool) {
+pub fn print_table(rows: &[DisplayRow], time_header: &str) {
     let terminal_width = if let Some((Width(w), _)) = terminal_size() {
         w as usize
     } else {
@@ -28,8 +28,6 @@ pub fn print_table(rows: &[DisplayRow], is_record: bool) {
     // Total used: column widths + 5 delimiters (|) + margin
     let content_width =
         terminal_width.saturating_sub(index_width + category_width + timestr_width + 5 + margin);
-
-    let time_header = if is_record { "Created At" } else { "Deadline" };
 
     let separator_width = terminal_width - margin + 4;
 

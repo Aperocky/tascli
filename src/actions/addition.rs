@@ -34,7 +34,7 @@ pub fn handle_taskcmd(conn: &Connection, cmd: &TaskCommand) -> Result<(), String
             insert_item(conn, &new_task).map_err(|e| e.to_string())?;
 
             display::print_bold("Inserted Task:");
-            display::print_items(&[new_task], false, false);
+            display::print_items(&[new_task], false);
             Ok(())
         }
         Err(_) => match timestr::parse_recurring_timestr(&target_timestr) {
@@ -44,7 +44,7 @@ pub fn handle_taskcmd(conn: &Connection, cmd: &TaskCommand) -> Result<(), String
                 insert_item(conn, &new_recurring_task).map_err(|e| e.to_string())?;
 
                 display::print_bold("Inserted Recurring Task:");
-                display::print_items(&[new_recurring_task], false, false);
+                display::print_items(&[new_recurring_task], false);
                 Ok(())
             }
             Err(_) => Err(format!(
@@ -72,7 +72,7 @@ pub fn handle_recordcmd(conn: &Connection, cmd: &RecordCommand) -> Result<(), St
     insert_item(conn, &new_record).map_err(|e| e.to_string())?;
 
     display::print_bold("Inserted Record:");
-    display::print_items(&[new_record], true, false);
+    display::print_items(&[new_record], false);
     Ok(())
 }
 

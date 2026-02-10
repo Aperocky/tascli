@@ -86,7 +86,7 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
             .map_err(|e| format!("Failed to create completion record: {:?}", e))?;
 
         display::print_bold("Completed Recurring Task:");
-        display::print_items(&[item], false, false);
+        display::print_items(&[item], false);
         return Ok(());
     }
 
@@ -107,7 +107,7 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     item.status = status;
     update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
     display::print_bold("Completed Task:");
-    display::print_items(&[item], false, false);
+    display::print_items(&[item], false);
     Ok(())
 }
 
@@ -116,8 +116,7 @@ pub fn handle_deletecmd(conn: &Connection, cmd: &DeleteCommand) -> Result<(), St
     let row_id = get_rowid_from_cache(conn, cmd.index)?;
     let item = get_item(conn, row_id).map_err(|e| format!("Failed to find item: {:?}", e))?;
     let item_type = item.action.clone();
-    let is_record = item_type == RECORD || item_type == RECURRING_TASK_RECORD;
-    display::print_items(&[item], is_record, false);
+    display::print_items(&[item], false);
     let accept = prompt_yes_no(&format!(
         "Are you sure you want to delete this {}? ",
         &item_type
@@ -169,7 +168,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
         update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
 
         display::print_bold("Updated Recurring Task:");
-        display::print_items(&[item], false, false);
+        display::print_items(&[item], false);
         return Ok(());
     }
 
@@ -200,7 +199,7 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
     let is_record = item.action == RECORD || item.action == RECURRING_TASK_RECORD;
     let action = if is_record { "Record" } else { "Task" };
     display::print_bold(&format!("Updated {}:", action));
-    display::print_items(&[item], is_record, false);
+    display::print_items(&[item], false);
     Ok(())
 }
 

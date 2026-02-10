@@ -24,8 +24,13 @@ pub fn print_red(text: &str) {
 }
 
 // print items in a table.
-pub fn print_items(items: &[Item], is_record: bool, is_list: bool) {
+pub fn print_items(items: &[Item], is_list: bool) {
     let mut results: Vec<DisplayRow> = Vec::with_capacity(items.len());
+
+    // Detect what types of items we have
+    let has_records = items.iter().any(|i| i.action == "record" || i.action == "recurring_task_record");
+    let has_tasks = items.iter().any(|i| i.action == "task" || i.action == "recurring_task");
+
     for (index, item) in items.iter().enumerate() {
         let indexstr = if is_list {
             format!("{}", index + 1)
@@ -40,5 +45,15 @@ pub fn print_items(items: &[Item], is_record: bool, is_list: bool) {
             results.push(DisplayRow::from_task(indexstr, item))
         }
     }
-    print_table(&results, is_record);
+
+    // Determine the appropriate time header based on content
+    let time_header = if has_records && has_tasks {
+        "Time"  // generic for mixed items
+    } else if has_records {
+        "Created At"
+    } else {
+        "Deadline"
+    };
+
+    print_table(&results, time_header);
 }
