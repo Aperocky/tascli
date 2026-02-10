@@ -6,7 +6,10 @@ use std::io::{
 use rusqlite::Connection;
 
 use crate::{
-    actions::display,
+    actions::{
+        display,
+        ops::backup::backup_path,
+    },
     args::{
         parser::OpsBatchCommand,
         timestr,
@@ -65,6 +68,13 @@ pub fn handle_batchcmd(conn: &Connection, cmd: &OpsBatchCommand) -> Result<(), S
     if items.is_empty() {
         display::print_bold("No items found matching the filters");
         return Ok(());
+    }
+
+    if items.len() > 1 {
+        display::print_bold("backing up database prior to batch operation");
+        if let Err(e) = backup_path(None) {
+            display::print_red(&e);
+        }
     }
 
     let updates = if cmd.delete {
