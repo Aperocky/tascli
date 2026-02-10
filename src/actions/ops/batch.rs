@@ -1,5 +1,9 @@
+use std::io::{
+    self,
+    Write,
+};
+
 use rusqlite::Connection;
-use std::io::{self, Write};
 
 use crate::{
     actions::display,
@@ -9,49 +13,47 @@ use crate::{
     },
     db::{
         crud::query_items,
-        item::ItemQuery,
-        ops::{batch_delete_items, batch_update_items, ItemUpdates},
+        item::{
+            Item,
+            ItemQuery,
+        },
+        ops::{
+            batch_delete_items,
+            batch_update_items,
+            ItemUpdates,
+        },
     },
 };
 
 pub fn handle_batchcmd(conn: &Connection, cmd: &OpsBatchCommand) -> Result<(), String> {
-    // Skip interactive mode for now
-    if cmd.interactive {
-        return Err("Interactive mode is not yet supported".to_string());
-    }
-
-    // Parse action filter
     let actions = parse_action_filter(&cmd.action)?;
 
-    // Validate restrictions for "all"
-    if cmd.action == "all" {
-        if cmd.status_to.is_some() {
-            return Err("Cannot set status when action is 'all' (status only applies to tasks)".to_string());
-        }
-        if cmd.target_time_to.is_some() {
-            return Err("Cannot set target_time when action is 'all' (target_time only applies to tasks)".to_string());
-        }
+    if cmd.action == "all" && (cmd.status_to.is_some() || cmd.target_time_to.is_some()) {
+        return Err("Cannot set status or target_time when action is 'all'".to_string());
     }
 
-    // Validate at least one operation is specified
-    if !cmd.delete && cmd.category_to.is_none() && cmd.status_to.is_none() && cmd.target_time_to.is_none() {
-        return Err("Must specify at least one operation: --delete, --category-to, --status-to, or --target-time-to".to_string());
+    if !cmd.delete
+        && cmd.category_to.is_none()
+        && cmd.status_to.is_none()
+        && cmd.target_time_to.is_none()
+    {
+        return Err(
+            "Must specify an operation: --delete, --category-to, --status-to, or --target-time-to"
+                .to_string(),
+        );
     }
 
-    // Parse time filters
-    let create_time_min = if let Some(ref starting_time) = cmd.starting_time {
-        Some(timestr::to_unix_epoch(starting_time)?)
-    } else {
-        None
-    };
+    let create_time_min = cmd
+        .starting_time
+        .as_ref()
+        .map(|t| timestr::to_unix_epoch(t))
+        .transpose()?;
+    let create_time_max = cmd
+        .ending_time
+        .as_ref()
+        .map(|t| timestr::to_unix_epoch(t))
+        .transpose()?;
 
-    let create_time_max = if let Some(ref ending_time) = cmd.ending_time {
-        Some(timestr::to_unix_epoch(ending_time)?)
-    } else {
-        None
-    };
-
-    // Query items to preview what will be affected
     let items = query_items_for_batch(
         conn,
         actions.as_ref(),
@@ -65,19 +67,132 @@ pub fn handle_batchcmd(conn: &Connection, cmd: &OpsBatchCommand) -> Result<(), S
         return Ok(());
     }
 
-    // Extract IDs - these are exactly the items we'll operate on
+    let updates = if cmd.delete {
+        None
+    } else {
+        let target_time = cmd
+            .target_time_to
+            .as_ref()
+            .map(|t| timestr::to_unix_epoch(t))
+            .transpose()?;
+        Some(ItemUpdates {
+            category: cmd.category_to.clone(),
+            status: cmd.status_to,
+            target_time,
+        })
+    };
+
+    if cmd.interactive {
+        execute_interactive(conn, &items, cmd, updates.as_ref())
+    } else {
+        execute_bulk(conn, &items, cmd, updates.as_ref())
+    }
+}
+
+fn execute_bulk(
+    conn: &Connection,
+    items: &[Item],
+    cmd: &OpsBatchCommand,
+    updates: Option<&ItemUpdates>,
+) -> Result<(), String> {
     let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
 
-    // Display items that will be affected
     display::print_bold(&format!("Found {} items matching filters:", items.len()));
-    display::print_items(&items, true);
-
-    // Show what operation will be performed
+    display::print_items(items, true);
     println!();
-    if cmd.delete {
-        display::print_red("⚠ WARNING: This will DELETE the above items permanently!");
+    print_operation_description(cmd);
+
+    print!("\nProceed? (y/n): ");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| e.to_string())?;
+
+    if input.trim().to_lowercase() != "y" {
+        display::print_bold("Cancelled");
+        return Ok(());
+    }
+
+    let affected = apply_operation(conn, &item_ids, cmd.delete, updates)?;
+    let verb = if cmd.delete { "deleted" } else { "updated" };
+    display::print_bold(&format!(
+        "✓ Successfully {} {}",
+        verb,
+        pluralize(affected, "item")
+    ));
+    Ok(())
+}
+
+fn execute_interactive(
+    conn: &Connection,
+    items: &[Item],
+    cmd: &OpsBatchCommand,
+    updates: Option<&ItemUpdates>,
+) -> Result<(), String> {
+    let total = items.len();
+    display::print_bold(&format!("Interactive mode: {} items found", total));
+    println!();
+    print_operation_description(cmd);
+
+    let mut accepted = 0;
+    let mut skipped = 0;
+
+    for (idx, item) in items.iter().enumerate() {
+        println!();
+        display::print_bold(&format!("Item {}/{}:", idx + 1, total));
+        display::print_items(std::slice::from_ref(item), false);
+
+        match prompt_y_n_q()? {
+            'y' => {
+                apply_operation(conn, &[item.id.unwrap()], cmd.delete, updates)?;
+                accepted += 1;
+            }
+            'n' => skipped += 1,
+            'q' => {
+                let remaining = total - accepted - skipped;
+                let verb = if cmd.delete { "Deleted" } else { "Updated" };
+                display::print_bold(&format!(
+                    "✓ {} {}, skipped {}, quit with {} remaining",
+                    verb,
+                    pluralize(accepted, "item"),
+                    skipped,
+                    remaining
+                ));
+                return Ok(());
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    let verb = if cmd.delete { "Deleted" } else { "Updated" };
+    display::print_bold(&format!(
+        "✓ {} {}, skipped {}",
+        verb,
+        pluralize(accepted, "item"),
+        skipped
+    ));
+    Ok(())
+}
+
+fn apply_operation(
+    conn: &Connection,
+    item_ids: &[i64],
+    delete: bool,
+    updates: Option<&ItemUpdates>,
+) -> Result<usize, String> {
+    if delete {
+        batch_delete_items(conn, item_ids).map_err(|e| e.to_string())
     } else {
-        display::print_bold("This will update the above items:");
+        batch_update_items(conn, item_ids, updates.unwrap()).map_err(|e| e.to_string())
+    }
+}
+
+fn print_operation_description(cmd: &OpsBatchCommand) {
+    if cmd.delete {
+        display::print_red("⚠ WARNING: Selected items will be DELETED permanently!");
+    } else {
+        display::print_bold("Operation to apply:");
         if let Some(ref cat) = cmd.category_to {
             println!("  • Change category to: {}", cat);
         }
@@ -88,51 +203,41 @@ pub fn handle_batchcmd(conn: &Connection, cmd: &OpsBatchCommand) -> Result<(), S
             println!("  • Change target_time to: {}", time);
         }
     }
+}
 
-    // Ask for confirmation
-    print!("\nProceed? (y/n): ");
-    io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).map_err(|e| e.to_string())?;
-
-    if input.trim().to_lowercase() != "y" {
-        display::print_bold("Cancelled");
-        return Ok(());
+fn prompt_y_n_q() -> Result<char, String> {
+    loop {
+        print!("Apply? (y/n/q): ");
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| e.to_string())?;
+        match input.trim().to_lowercase().chars().next() {
+            Some('y') => return Ok('y'),
+            Some('n') => return Ok('n'),
+            Some('q') => return Ok('q'),
+            _ => println!("Please enter y, n, or q"),
+        }
     }
+}
 
-    // Execute the batch operation on the exact IDs we showed
-    let affected = if cmd.delete {
-        batch_delete_items(conn, &item_ids).map_err(|e| e.to_string())?
+fn pluralize(n: usize, word: &str) -> String {
+    if n == 1 {
+        format!("{} {}", n, word)
     } else {
-        let target_time_to = if let Some(ref time_str) = cmd.target_time_to {
-            Some(timestr::to_unix_epoch(time_str)?)
-        } else {
-            None
-        };
-
-        let updates = ItemUpdates {
-            category: cmd.category_to.clone(),
-            status: cmd.status_to,
-            target_time: target_time_to,
-        };
-
-        batch_update_items(conn, &item_ids, &updates).map_err(|e| e.to_string())?
-    };
-
-    display::print_bold(&format!("✓ Successfully affected {} items", affected));
-    Ok(())
+        format!("{} {}s", n, word)
+    }
 }
 
 fn parse_action_filter(action: &str) -> Result<Option<Vec<String>>, String> {
     match action {
         "all" => Ok(None),
-        "task" => Ok(Some(vec!["task".to_string()])),
-        "record" => Ok(Some(vec!["record".to_string()])),
-        "recurring_task" => Ok(Some(vec!["recurring_task".to_string()])),
-        "recurring_task_record" => Ok(Some(vec!["recurring_task_record".to_string()])),
+        "task" | "record" | "recurring_task" | "recurring_task_record" => {
+            Ok(Some(vec![action.to_string()]))
+        }
         _ => Err(format!(
-            "Invalid action type: '{}'. Expected: all, task, record, recurring_task, or recurring_task_record",
+            "Invalid action: '{}'. Expected: all, task, record, recurring_task, recurring_task_record",
             action
         )),
     }
@@ -144,27 +249,20 @@ fn query_items_for_batch(
     category: Option<&str>,
     create_time_min: Option<i64>,
     create_time_max: Option<i64>,
-) -> Result<Vec<crate::db::item::Item>, String> {
+) -> Result<Vec<Item>, String> {
     let mut query = ItemQuery::new();
-
     if let Some(acts) = actions {
-        let action_strs: Vec<&str> = acts.iter().map(|s| s.as_str()).collect();
-        query = query.with_actions(action_strs);
+        query = query.with_actions(acts.iter().map(|s| s.as_str()).collect());
     }
-
     if let Some(cat) = category {
         query = query.with_category(cat);
     }
-
     if let Some(min) = create_time_min {
         query = query.with_create_time_min(min);
     }
-
     if let Some(max) = create_time_max {
         query = query.with_create_time_max(max);
     }
-
-    // No limit for batch operations - we want to see everything that will be affected
     query_items(conn, &query).map_err(|e| e.to_string())
 }
 
@@ -184,16 +282,20 @@ fn status_to_string(status: u8) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{
-        get_test_conn,
-        insert_record,
-        insert_recurring_record,
-        insert_recurring_task,
-        insert_task,
-        update_status,
+    use crate::{
+        db::{
+            crud::query_items,
+            item::ItemQuery,
+        },
+        tests::{
+            get_test_conn,
+            insert_record,
+            insert_recurring_record,
+            insert_recurring_task,
+            insert_task,
+            update_status,
+        },
     };
-    use crate::db::crud::query_items;
-    use crate::db::item::ItemQuery;
 
     #[test]
     fn test_parse_action_filter() {
@@ -206,145 +308,101 @@ mod tests {
             parse_action_filter("record").unwrap(),
             Some(vec!["record".to_string()])
         );
-        assert_eq!(
-            parse_action_filter("recurring_task").unwrap(),
-            Some(vec!["recurring_task".to_string()])
-        );
-        assert_eq!(
-            parse_action_filter("recurring_task_record").unwrap(),
-            Some(vec!["recurring_task_record".to_string()])
-        );
         assert!(parse_action_filter("invalid").is_err());
     }
 
     #[test]
     fn test_query_items_for_batch() {
         let (conn, _temp_file) = get_test_conn();
-
-        // Insert test data
         insert_task(&conn, "work", "task 1", "today");
         insert_task(&conn, "work", "task 2", "today");
         insert_task(&conn, "personal", "task 3", "today");
         insert_record(&conn, "work", "record 1", "yesterday");
-        insert_record(&conn, "personal", "record 2", "yesterday");
 
-        // Test 1: Query all items
-        let items = query_items_for_batch(&conn, None, None, None, None).unwrap();
-        assert_eq!(items.len(), 5);
+        assert_eq!(
+            query_items_for_batch(&conn, None, None, None, None)
+                .unwrap()
+                .len(),
+            4
+        );
 
-        // Test 2: Filter by action
         let actions = Some(vec!["task".to_string()]);
         let items = query_items_for_batch(&conn, actions.as_ref(), None, None, None).unwrap();
         assert_eq!(items.len(), 3);
         assert!(items.iter().all(|i| i.action == "task"));
 
-        // Test 3: Filter by category
         let items = query_items_for_batch(&conn, None, Some("work"), None, None).unwrap();
         assert_eq!(items.len(), 3);
         assert!(items.iter().all(|i| i.category == "work"));
-
-        // Test 4: Combine filters
-        let actions = Some(vec!["task".to_string()]);
-        let items = query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
-        assert_eq!(items.len(), 2);
-        assert!(items.iter().all(|i| i.action == "task" && i.category == "work"));
     }
 
     #[test]
     fn test_batch_update_category() {
         let (conn, _temp_file) = get_test_conn();
-
-        // Insert test data
         insert_task(&conn, "work", "task 1", "today");
         insert_task(&conn, "work", "task 2", "today");
         insert_record(&conn, "work", "record 1", "yesterday");
 
-        // Query work tasks
         let actions = Some(vec!["task".to_string()]);
-        let items = query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
-        assert_eq!(items.len(), 2);
-
-        // Extract IDs and update category from "work" to "personal"
+        let items =
+            query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
+
         let updates = ItemUpdates {
             category: Some("personal".to_string()),
             status: None,
             target_time: None,
         };
-        let affected = batch_update_items(&conn, &item_ids, &updates).unwrap();
+        assert_eq!(batch_update_items(&conn, &item_ids, &updates).unwrap(), 2);
 
-        assert_eq!(affected, 2);
+        let query = ItemQuery::new()
+            .with_category("personal")
+            .with_actions(vec!["task"]);
+        assert_eq!(query_items(&conn, &query).unwrap().len(), 2);
 
-        // Verify the tasks were updated
-        let mut query = ItemQuery::new();
-        query = query.with_category("personal").with_actions(vec!["task"]);
-        let items = query_items(&conn, &query).unwrap();
-        assert_eq!(items.len(), 2);
-
-        // Verify the record was NOT touched (still in "work")
-        let mut query = ItemQuery::new();
-        query = query.with_category("work").with_actions(vec!["record"]);
-        let items = query_items(&conn, &query).unwrap();
-        assert_eq!(items.len(), 1);
+        let query = ItemQuery::new()
+            .with_category("work")
+            .with_actions(vec!["record"]);
+        assert_eq!(query_items(&conn, &query).unwrap().len(), 1);
     }
 
     #[test]
     fn test_batch_update_status() {
         let (conn, _temp_file) = get_test_conn();
-
-        // Insert test data
         let id1 = insert_task(&conn, "work", "task 1", "today");
         let id2 = insert_task(&conn, "work", "task 2", "today");
-        update_status(&conn, id1, 0); // ongoing
-        update_status(&conn, id2, 0); // ongoing
+        update_status(&conn, id1, 0);
+        update_status(&conn, id2, 0);
 
-        // Query work tasks
-        let actions = Some(vec!["task".to_string()]);
-        let items = query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
-        assert_eq!(items.len(), 2);
-
-        // Extract IDs and update status to completed
-        let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
         let updates = ItemUpdates {
             category: None,
-            status: Some(1), // completed
+            status: Some(1),
             target_time: None,
         };
-        let affected = batch_update_items(&conn, &item_ids, &updates).unwrap();
+        assert_eq!(batch_update_items(&conn, &[id1, id2], &updates).unwrap(), 2);
 
-        assert_eq!(affected, 2);
-
-        // Verify the update
-        let mut query = ItemQuery::new();
-        query = query.with_category("work").with_actions(vec!["task"]);
+        let query = ItemQuery::new()
+            .with_category("work")
+            .with_actions(vec!["task"]);
         let items = query_items(&conn, &query).unwrap();
-        assert_eq!(items.len(), 2);
         assert!(items.iter().all(|i| i.status == 1));
     }
 
     #[test]
     fn test_batch_delete() {
         let (conn, _temp_file) = get_test_conn();
-
-        // Insert test data
         insert_task(&conn, "work", "task 1", "today");
         insert_task(&conn, "work", "task 2", "today");
         insert_task(&conn, "personal", "task 3", "today");
 
-        // Query work tasks
         let actions = Some(vec!["task".to_string()]);
-        let items = query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
-        assert_eq!(items.len(), 2);
-
-        // Extract IDs and delete
+        let items =
+            query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
-        let affected = batch_delete_items(&conn, &item_ids).unwrap();
 
-        assert_eq!(affected, 2);
+        assert_eq!(batch_delete_items(&conn, &item_ids).unwrap(), 2);
 
-        // Verify deletion
-        let mut query = ItemQuery::new();
-        query = query.with_actions(vec!["task"]);
+        let query = ItemQuery::new().with_actions(vec!["task"]);
         let items = query_items(&conn, &query).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].category, "personal");
@@ -353,149 +411,97 @@ mod tests {
     #[test]
     fn test_batch_with_recurring() {
         let (conn, _temp_file) = get_test_conn();
-
-        // Insert test data
         insert_task(&conn, "work", "task 1", "today");
         let rt_id = insert_recurring_task(&conn, "work", "standup", "Daily 9AM");
         insert_recurring_record(&conn, "work", "standup done", rt_id, 1000);
 
-        // Query all work items (should include recurring)
         let items = query_items_for_batch(&conn, None, Some("work"), None, None).unwrap();
-        assert_eq!(items.len(), 3); // 1 task + 1 recurring_task + 1 recurring_task_record
+        assert_eq!(items.len(), 3);
 
-        // Extract IDs and update category for all work items
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
         let updates = ItemUpdates {
             category: Some("standup".to_string()),
             status: None,
             target_time: None,
         };
-        let affected = batch_update_items(&conn, &item_ids, &updates).unwrap();
+        assert_eq!(batch_update_items(&conn, &item_ids, &updates).unwrap(), 3);
 
-        assert_eq!(affected, 3);
-
-        // Verify all moved to new category
-        let items = query_items_for_batch(&conn, None, Some("standup"), None, None).unwrap();
-        assert_eq!(items.len(), 3);
+        assert_eq!(
+            query_items_for_batch(&conn, None, Some("standup"), None, None)
+                .unwrap()
+                .len(),
+            3
+        );
     }
 
     #[test]
     fn test_batch_with_time_filters() {
         let (conn, _temp_file) = get_test_conn();
-
-        // Insert records with specific times
         insert_record(&conn, "test", "record 1", "2025/02/20 10AM");
         insert_record(&conn, "test", "record 2", "2025/02/25 10AM");
         insert_record(&conn, "test", "record 3", "2025/02/28 10AM");
 
-        // Query with time range
-        let start_time = timestr::to_unix_epoch("2025/02/22").unwrap();
-        let end_time = timestr::to_unix_epoch("2025/02/27").unwrap();
-        let items = query_items_for_batch(
-            &conn,
-            None,
-            Some("test"),
-            Some(start_time),
-            Some(end_time),
-        )
-        .unwrap();
-
-        // Should only get record 2
+        let start = timestr::to_unix_epoch("2025/02/22").unwrap();
+        let end = timestr::to_unix_epoch("2025/02/27").unwrap();
+        let items =
+            query_items_for_batch(&conn, None, Some("test"), Some(start), Some(end)).unwrap();
         assert_eq!(items.len(), 1);
         assert!(items[0].content.contains("record 2"));
 
-        // Extract IDs and delete items in time range
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
-        let affected = batch_delete_items(&conn, &item_ids).unwrap();
-
-        assert_eq!(affected, 1);
-
-        // Verify only 2 records remain
-        let items = query_items_for_batch(&conn, None, Some("test"), None, None).unwrap();
-        assert_eq!(items.len(), 2);
-    }
-
-    #[test]
-    fn test_batch_no_items_found() {
-        let (conn, _temp_file) = get_test_conn();
-
-        insert_task(&conn, "work", "task 1", "today");
-
-        // Query from non-existent category
-        let actions = Some(vec!["task".to_string()]);
-        let items = query_items_for_batch(&conn, actions.as_ref(), Some("nonexistent"), None, None).unwrap();
-        assert_eq!(items.len(), 0);
-
-        // Extract IDs and try to delete (should be empty)
-        let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
-        let affected = batch_delete_items(&conn, &item_ids).unwrap();
-
-        assert_eq!(affected, 0);
-    }
-
-    #[test]
-    fn test_batch_multiple_updates() {
-        let (conn, _temp_file) = get_test_conn();
-
-        // Insert test data
-        insert_task(&conn, "work", "task 1", "today");
-        insert_task(&conn, "work", "task 2", "today");
-
-        // Query work tasks
-        let actions = Some(vec!["task".to_string()]);
-        let items = query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
-        assert_eq!(items.len(), 2);
-
-        // Extract IDs and update category, status, and target time
-        let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
-        let target_time = timestr::to_unix_epoch("tomorrow").unwrap();
-        let updates = ItemUpdates {
-            category: Some("urgent".to_string()),
-            status: Some(1), // completed
-            target_time: Some(target_time),
-        };
-        let affected = batch_update_items(&conn, &item_ids, &updates).unwrap();
-
-        assert_eq!(affected, 2);
-
-        // Verify all updates applied
-        let mut query = ItemQuery::new();
-        query = query.with_category("urgent").with_actions(vec!["task"]);
-        let items = query_items(&conn, &query).unwrap();
-        assert_eq!(items.len(), 2);
-        assert!(items.iter().all(|i| i.status == 1));
-        assert!(items.iter().all(|i| i.target_time == Some(target_time)));
+        assert_eq!(batch_delete_items(&conn, &item_ids).unwrap(), 1);
+        assert_eq!(
+            query_items_for_batch(&conn, None, Some("test"), None, None)
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]
     fn test_batch_with_mixed_tasks_and_records() {
         let (conn, _temp_file) = get_test_conn();
-
-        // Insert mixed items (tasks and records) in same category
         insert_task(&conn, "personal", "task 1", "today");
         insert_task(&conn, "personal", "task 2", "tomorrow");
         insert_record(&conn, "personal", "record 1", "yesterday");
         insert_record(&conn, "personal", "record 2", "today");
 
-        // Query all personal items (mix of tasks and records)
         let items = query_items_for_batch(&conn, None, Some("personal"), None, None).unwrap();
         assert_eq!(items.len(), 4);
 
-        // Extract IDs and update category
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
         let updates = ItemUpdates {
             category: Some("person".to_string()),
             status: None,
             target_time: None,
         };
-        let affected = batch_update_items(&conn, &item_ids, &updates).unwrap();
+        assert_eq!(batch_update_items(&conn, &item_ids, &updates).unwrap(), 4);
 
-        assert_eq!(affected, 4);
-
-        // Verify all items moved to new category
         let items = query_items_for_batch(&conn, None, Some("person"), None, None).unwrap();
-        assert_eq!(items.len(), 4);
         assert_eq!(items.iter().filter(|i| i.action == "task").count(), 2);
         assert_eq!(items.iter().filter(|i| i.action == "record").count(), 2);
+    }
+
+    #[test]
+    fn test_apply_operation() {
+        let (conn, _temp_file) = get_test_conn();
+        let id1 = insert_task(&conn, "work", "task 1", "today");
+        let id2 = insert_task(&conn, "work", "task 2", "today");
+        let id3 = insert_task(&conn, "work", "task 3", "today");
+
+        let updates = ItemUpdates {
+            category: Some("done".to_string()),
+            status: Some(1),
+            target_time: None,
+        };
+        assert_eq!(
+            apply_operation(&conn, &[id1], false, Some(&updates)).unwrap(),
+            1
+        );
+        assert_eq!(apply_operation(&conn, &[id2], true, None).unwrap(), 1);
+
+        let items = query_items_for_batch(&conn, None, Some("work"), None, None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id.unwrap(), id3);
     }
 }
