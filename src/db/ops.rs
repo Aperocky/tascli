@@ -1,19 +1,7 @@
-use std::time::{
-    SystemTime,
-    UNIX_EPOCH,
-};
-
 use rusqlite::{
-    params,
     params_from_iter,
     Connection,
     Result,
-};
-
-use crate::db::item::{
-    Item,
-    ItemQuery,
-    Offset,
 };
 
 #[derive(Debug)]
@@ -39,31 +27,15 @@ pub struct StatTable {
     pub totals: StatRow,
 }
 
-pub fn build_batch_where_clause(
-    actions: Option<Vec<&str>>,
+pub fn build_stat_where_clause(
     category: Option<&str>,
     create_time_min: Option<i64>,
     create_time_max: Option<i64>,
     target_time_min: Option<i64>,
     target_time_max: Option<i64>,
-    statuses: Option<Vec<u8>>,
 ) -> (String, Vec<String>) {
     let mut conditions: Vec<String> = Vec::new();
     let mut params: Vec<String> = Vec::new();
-
-    if let Some(actions) = actions {
-        if actions.len() == 1 {
-            conditions.push("action = ?".to_string());
-            params.push(actions[0].to_string());
-        } else if actions.len() > 1 {
-            let action_list = actions
-                .iter()
-                .map(|a| format!("'{}'", a))
-                .collect::<Vec<String>>()
-                .join(", ");
-            conditions.push(format!("action IN ({})", action_list));
-        }
-    }
 
     if let Some(c) = category {
         conditions.push("category = ?".to_string());
@@ -90,15 +62,6 @@ pub fn build_batch_where_clause(
         params.push(time.to_string());
     }
 
-    if let Some(cc) = statuses {
-        let status_list = cc
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>()
-            .join(", ");
-        conditions.push(format!("status IN ({})", status_list));
-    }
-
     let where_clause = if conditions.is_empty() {
         String::new()
     } else {
@@ -110,17 +73,15 @@ pub fn build_batch_where_clause(
 
 pub fn batch_update_items(
     conn: &Connection,
-    actions: Option<Vec<&str>>,
-    category: Option<&str>,
-    create_time_min: Option<i64>,
-    create_time_max: Option<i64>,
-    target_time_min: Option<i64>,
-    target_time_max: Option<i64>,
-    statuses: Option<Vec<u8>>,
+    item_ids: &[i64],
     updates: &ItemUpdates,
 ) -> Result<usize> {
+    if item_ids.is_empty() {
+        return Ok(0);
+    }
+
     let mut set_parts = Vec::new();
-    let mut set_params = Vec::new();
+    let mut set_params: Vec<String> = Vec::new();
 
     if let Some(cat) = &updates.category {
         set_parts.push("category = ?");
@@ -140,20 +101,13 @@ pub fn batch_update_items(
     }
 
     let set_clause = set_parts.join(", ");
-    let (where_clause, where_params) = build_batch_where_clause(
-        actions,
-        category,
-        create_time_min,
-        create_time_max,
-        target_time_min,
-        target_time_max,
-        statuses,
-    );
 
+    // Build WHERE id IN (?, ?, ...)
+    let placeholders = vec!["?"; item_ids.len()].join(", ");
     let mut all_params = set_params;
-    all_params.extend(where_params);
+    all_params.extend(item_ids.iter().map(|id| id.to_string()));
 
-    let query = format!("UPDATE items SET {}{}", set_clause, where_clause);
+    let query = format!("UPDATE items SET {} WHERE id IN ({})", set_clause, placeholders);
     let affected = conn.execute(&query, params_from_iter(all_params))?;
 
     Ok(affected)
@@ -161,25 +115,16 @@ pub fn batch_update_items(
 
 pub fn batch_delete_items(
     conn: &Connection,
-    actions: Option<Vec<&str>>,
-    category: Option<&str>,
-    create_time_min: Option<i64>,
-    create_time_max: Option<i64>,
-    target_time_min: Option<i64>,
-    target_time_max: Option<i64>,
-    statuses: Option<Vec<u8>>,
+    item_ids: &[i64],
 ) -> Result<usize> {
-    let (where_clause, params) = build_batch_where_clause(
-        actions,
-        category,
-        create_time_min,
-        create_time_max,
-        target_time_min,
-        target_time_max,
-        statuses,
-    );
+    if item_ids.is_empty() {
+        return Ok(0);
+    }
 
-    let query = format!("DELETE FROM items{}", where_clause);
+    let placeholders = vec!["?"; item_ids.len()].join(", ");
+    let params: Vec<String> = item_ids.iter().map(|id| id.to_string()).collect();
+
+    let query = format!("DELETE FROM items WHERE id IN ({})", placeholders);
     let affected = conn.execute(&query, params_from_iter(params))?;
 
     Ok(affected)
@@ -193,14 +138,12 @@ pub fn get_stats(
     target_time_min: Option<i64>,
     target_time_max: Option<i64>,
 ) -> Result<StatTable> {
-    let (where_clause, params) = build_batch_where_clause(
-        None, // Always include all action types for stats
+    let (where_clause, params) = build_stat_where_clause(
         category,
         create_time_min,
         create_time_max,
         target_time_min,
         target_time_max,
-        None, // statuses not used for stats
     );
 
     let query = format!(
@@ -277,8 +220,6 @@ mod tests {
         db::item::{
             Item,
             RECORD,
-            RECURRING_TASK_RECORD,
-            TASK,
         },
         tests::{
             get_test_conn,
@@ -286,57 +227,49 @@ mod tests {
             insert_recurring_record,
             insert_recurring_task,
             insert_task,
-            update_status,
         },
     };
 
     use crate::db::crud::{
+        get_item,
         insert_item,
-        query_items,
     };
-    use crate::db::item::ItemQuery;
 
     #[test]
-    fn test_build_batch_where_clause() {
+    fn test_build_stat_where_clause() {
         // Test with all parameters
-        let (where_clause, params) = build_batch_where_clause(
-            Some(vec![TASK]),
+        let (where_clause, params) = build_stat_where_clause(
             Some("work"),
             Some(1000),
             Some(2000),
             Some(3000),
             Some(4000),
-            Some(vec![0, 1]),
         );
         assert_eq!(
             where_clause,
-            " WHERE action = ? AND category = ? AND create_time > ? AND create_time <= ? AND target_time > ? AND target_time <= ? AND status IN (0, 1)"
+            " WHERE category = ? AND create_time > ? AND create_time <= ? AND target_time > ? AND target_time <= ?"
         );
-        assert_eq!(params, vec!["task", "work", "1000", "2000", "3000", "4000"]);
+        assert_eq!(params, vec!["work", "1000", "2000", "3000", "4000"]);
 
-        // Test with multiple actions
-        let (where_clause, params) = build_batch_where_clause(
-            Some(vec![TASK, RECORD]),
+        // Test with only category
+        let (where_clause, params) = build_stat_where_clause(
             Some("life"),
             None,
             None,
             None,
             None,
-            None,
         );
         assert_eq!(
             where_clause,
-            " WHERE action IN ('task', 'record') AND category = ?"
+            " WHERE category = ?"
         );
         assert_eq!(params, vec!["life"]);
 
         // Test with only time ranges
-        let (where_clause, params) = build_batch_where_clause(
-            None,
+        let (where_clause, params) = build_stat_where_clause(
             None,
             Some(5000),
             Some(6000),
-            None,
             None,
             None,
         );
@@ -347,9 +280,7 @@ mod tests {
         assert_eq!(params, vec!["5000", "6000"]);
 
         // Test with no parameters (empty WHERE clause)
-        let (where_clause, params) = build_batch_where_clause(
-            None,
-            None,
+        let (where_clause, params) = build_stat_where_clause(
             None,
             None,
             None,
@@ -359,312 +290,139 @@ mod tests {
         assert_eq!(where_clause, "");
         assert_eq!(params.len(), 0);
 
-        // Test with target_time only (for tasks)
-        let (where_clause, params) = build_batch_where_clause(
-            Some(vec![TASK]),
+        // Test with target_time only
+        let (where_clause, params) = build_stat_where_clause(
             None,
             None,
             None,
             Some(7000),
             Some(8000),
-            Some(vec![0]),
         );
         assert_eq!(
             where_clause,
-            " WHERE action = ? AND target_time > ? AND target_time <= ? AND status IN (0)"
+            " WHERE target_time > ? AND target_time <= ?"
         );
-        assert_eq!(params, vec!["task", "7000", "8000"]);
+        assert_eq!(params, vec!["7000", "8000"]);
     }
 
     #[test]
-    fn test_batch_update_items() {
+    fn test_batch_update_items_by_ids() {
         let (conn, _temp_file) = get_test_conn();
 
-        // Test 1: Update category on filtered tasks
-        insert_task(&conn, "work", "task 1", "today");
-        insert_task(&conn, "work", "task 2", "today");
-        insert_task(&conn, "work", "task 3", "tomorrow");
-        insert_task(&conn, "life", "task 4", "today");
-        insert_record(&conn, "work", "record 1", "yesterday");
+        // Test 1: Update category by IDs
+        let id1 = insert_task(&conn, "work", "task 1", "today");
+        let id2 = insert_task(&conn, "work", "task 2", "today");
+        let id3 = insert_task(&conn, "personal", "task 3", "today");
+        insert_record(&conn, "work", "record 1", "yesterday"); // Not updated
 
         let updates = ItemUpdates {
             category: Some("meetings".to_string()),
             status: None,
             target_time: None,
         };
-        let affected = batch_update_items(
-            &conn,
-            Some(vec![TASK]),
-            Some("work"),
-            None,
-            None,
-            None,
-            None,
-            None,
-            &updates,
-        )
-        .expect("batch update failed");
-        assert_eq!(affected, 3);
+        let affected = batch_update_items(&conn, &[id1, id2], &updates).unwrap();
+        assert_eq!(affected, 2);
 
-        let meetings_tasks = query_items(&conn, &ItemQuery::new().with_category("meetings"))
-            .expect("query failed");
-        assert_eq!(meetings_tasks.len(), 3);
-        for task in &meetings_tasks {
-            assert_eq!(task.action, TASK);
-        }
+        // Verify updates
+        let item1 = get_item(&conn, id1).unwrap();
+        let item2 = get_item(&conn, id2).unwrap();
+        let item3 = get_item(&conn, id3).unwrap();
+        assert_eq!(item1.category, "meetings");
+        assert_eq!(item2.category, "meetings");
+        assert_eq!(item3.category, "personal"); // Unchanged
 
-        let work_records = query_items(
-            &conn,
-            &ItemQuery::new().with_action(RECORD).with_category("work"),
-        )
-        .expect("query failed");
-        assert_eq!(work_records.len(), 1);
-
-        // Test 2: Update status on all tasks
+        // Test 2: Update status
         let updates = ItemUpdates {
             category: None,
-            status: Some(1),
+            status: Some(1), // completed
             target_time: None,
         };
-        let affected = batch_update_items(
-            &conn,
-            Some(vec![TASK]),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            &updates,
-        )
-        .expect("batch update failed");
-        assert_eq!(affected, 4);
+        let affected = batch_update_items(&conn, &[id1, id3], &updates).unwrap();
+        assert_eq!(affected, 2);
 
-        let done_tasks =
-            query_items(&conn, &ItemQuery::new().with_statuses(vec![1])).expect("query failed");
-        assert_eq!(done_tasks.len(), 4);
+        let item1 = get_item(&conn, id1).unwrap();
+        let item2 = get_item(&conn, id2).unwrap();
+        let item3 = get_item(&conn, id3).unwrap();
+        assert_eq!(item1.status, 1);
+        assert_eq!(item2.status, 0); // Unchanged
+        assert_eq!(item3.status, 1);
 
-        // Test 3: Update both category and status
-        insert_task(&conn, "personal", "task 5", "today");
-        let updates = ItemUpdates {
-            category: Some("home".to_string()),
-            status: Some(2),
-            target_time: None,
-        };
-        let affected = batch_update_items(
-            &conn,
-            Some(vec![TASK]),
-            Some("personal"),
-            None,
-            None,
-            None,
-            None,
-            None,
-            &updates,
-        )
-        .expect("batch update failed");
-        assert_eq!(affected, 1);
-
-        let home_tasks = query_items(&conn, &ItemQuery::new().with_category("home"))
-            .expect("query failed");
-        assert_eq!(home_tasks.len(), 1);
-        assert_eq!(home_tasks[0].status, 2);
-
-        // Test 4: Update with time range
-        let time_1000 = 1000;
-        let time_2000 = 2000;
-        let time_3000 = 3000;
-
-        let item1 = Item::with_create_time(RECORD.to_string(), "work".to_string(), "rec1".to_string(), time_1000);
-        insert_item(&conn, &item1).expect("insert failed");
-
-        let item2 = Item::with_create_time(RECORD.to_string(), "work".to_string(), "rec2".to_string(), time_2000);
-        insert_item(&conn, &item2).expect("insert failed");
-
-        let item3 = Item::with_create_time(RECORD.to_string(), "work".to_string(), "rec3".to_string(), time_3000);
-        insert_item(&conn, &item3).expect("insert failed");
-
-        let updates = ItemUpdates {
-            category: Some("archived".to_string()),
-            status: None,
-            target_time: None,
-        };
-        let affected = batch_update_items(
-            &conn,
-            Some(vec![RECORD]),
-            Some("work"),
-            Some(1500),
-            Some(2500),
-            None,
-            None,
-            None,
-            &updates,
-        )
-        .expect("batch update failed");
-        assert_eq!(affected, 1); // Only time_2000
-
-        let archived = query_items(&conn, &ItemQuery::new().with_category("archived"))
-            .expect("query failed");
-        assert_eq!(archived.len(), 1);
-        assert_eq!(archived[0].content, "rec2");
-
-        let work_items = query_items(&conn, &ItemQuery::new().with_category("work"))
-            .expect("query failed");
-        assert_eq!(work_items.len(), 3); // 1 from Test 1 + 2 from Test 4
-
-        // Test 5: Update target_time
+        // Test 3: Update multiple fields
         let new_target = 9999999;
         let updates = ItemUpdates {
-            category: None,
-            status: None,
+            category: Some("urgent".to_string()),
+            status: Some(2), // cancelled
             target_time: Some(new_target),
         };
-        let affected = batch_update_items(
-            &conn,
-            Some(vec![TASK]),
-            Some("home"),
-            None,
-            None,
-            None,
-            None,
-            None,
-            &updates,
-        )
-        .expect("batch update failed");
+        let affected = batch_update_items(&conn, &[id2], &updates).unwrap();
         assert_eq!(affected, 1);
 
-        let home_tasks = query_items(&conn, &ItemQuery::new().with_category("home"))
-            .expect("query failed");
-        assert_eq!(home_tasks[0].target_time, Some(new_target));
+        let item2 = get_item(&conn, id2).unwrap();
+        assert_eq!(item2.category, "urgent");
+        assert_eq!(item2.status, 2);
+        assert_eq!(item2.target_time, Some(new_target));
 
-        // Test 6: Error on empty updates
+        // Test 4: Empty IDs returns 0
+        let updates = ItemUpdates {
+            category: Some("test".to_string()),
+            status: None,
+            target_time: None,
+        };
+        let affected = batch_update_items(&conn, &[], &updates).unwrap();
+        assert_eq!(affected, 0);
+
+        // Test 5: Error on empty updates
         let updates = ItemUpdates {
             category: None,
             status: None,
             target_time: None,
         };
-        let result = batch_update_items(
-            &conn,
-            Some(vec![TASK]),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            &updates,
-        );
+        let result = batch_update_items(&conn, &[id1], &updates);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_batch_delete_items() {
+    fn test_batch_delete_items_by_ids() {
         let (conn, _temp_file) = get_test_conn();
 
-        // Test 1: Delete by action and category
-        insert_task(&conn, "work", "task 1", "today");
-        insert_task(&conn, "work", "task 2", "today");
-        insert_task(&conn, "work", "task 3", "tomorrow");
-        insert_task(&conn, "life", "task 4", "today");
-        insert_record(&conn, "work", "record 1", "yesterday");
+        // Test 1: Delete specific items by IDs
+        let id1 = insert_task(&conn, "work", "task 1", "today");
+        let id2 = insert_task(&conn, "work", "task 2", "today");
+        let id3 = insert_task(&conn, "personal", "task 3", "today");
+        let id4 = insert_record(&conn, "work", "record 1", "yesterday");
 
-        let affected = batch_delete_items(
-            &conn,
-            Some(vec![TASK]),
-            Some("work"),
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        .expect("batch delete failed");
-        assert_eq!(affected, 3);
-
-        let work_tasks = query_items(
-            &conn,
-            &ItemQuery::new().with_action(TASK).with_category("work"),
-        )
-        .expect("query failed");
-        assert_eq!(work_tasks.len(), 0);
-
-        let life_tasks = query_items(
-            &conn,
-            &ItemQuery::new().with_action(TASK).with_category("life"),
-        )
-        .expect("query failed");
-        assert_eq!(life_tasks.len(), 1);
-
-        let work_records = query_items(
-            &conn,
-            &ItemQuery::new().with_action(RECORD).with_category("work"),
-        )
-        .expect("query failed");
-        assert_eq!(work_records.len(), 1);
-
-        // Test 2: Delete with time range
-        let time_1000 = 1000;
-        let time_2000 = 2000;
-        let time_3000 = 3000;
-
-        let mut item1 = Item::with_create_time(TASK.to_string(), "cleanup".to_string(), "task1".to_string(), time_1000);
-        item1.target_time = Some(time_1000);
-        insert_item(&conn, &item1).expect("insert failed");
-
-        let mut item2 = Item::with_create_time(TASK.to_string(), "cleanup".to_string(), "task2".to_string(), time_2000);
-        item2.target_time = Some(time_2000);
-        insert_item(&conn, &item2).expect("insert failed");
-
-        let mut item3 = Item::with_create_time(TASK.to_string(), "cleanup".to_string(), "task3".to_string(), time_3000);
-        item3.target_time = Some(time_3000);
-        insert_item(&conn, &item3).expect("insert failed");
-
-        let affected = batch_delete_items(
-            &conn,
-            Some(vec![TASK]),
-            Some("cleanup"),
-            Some(1500),
-            Some(2500),
-            None,
-            None,
-            None,
-        )
-        .expect("batch delete failed");
-        assert_eq!(affected, 1); // Only time_2000
-
-        let remaining = query_items(&conn, &ItemQuery::new().with_category("cleanup"))
-            .expect("query failed");
-        assert_eq!(remaining.len(), 2);
-        let contents: Vec<&str> = remaining.iter().map(|i| i.content.as_str()).collect();
-        assert!(contents.contains(&"task1"));
-        assert!(contents.contains(&"task3"));
-
-        // Test 3: Delete with status filter
-        let id1 = insert_task(&conn, "archive", "task 1", "today");
-        let id2 = insert_task(&conn, "archive", "task 2", "today");
-        let _id3 = insert_task(&conn, "archive", "task 3", "today");
-
-        update_status(&conn, id1, 1); // done
-        update_status(&conn, id2, 2); // cancelled
-        // _id3 remains status 0 (ongoing)
-
-        let affected = batch_delete_items(
-            &conn,
-            Some(vec![TASK]),
-            Some("archive"),
-            None,
-            None,
-            None,
-            None,
-            Some(vec![1, 2]),
-        )
-        .expect("batch delete failed");
+        let affected = batch_delete_items(&conn, &[id1, id2]).unwrap();
         assert_eq!(affected, 2);
 
-        let remaining = query_items(&conn, &ItemQuery::new().with_category("archive"))
-            .expect("query failed");
-        assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].status, 0);
+        // Verify deletions
+        assert!(get_item(&conn, id1).is_err()); // Deleted
+        assert!(get_item(&conn, id2).is_err()); // Deleted
+        assert!(get_item(&conn, id3).is_ok()); // Still exists
+        assert!(get_item(&conn, id4).is_ok()); // Still exists
+
+        // Test 2: Delete mixed item types
+        let id5 = insert_task(&conn, "cleanup", "task 5", "today");
+        let id6 = insert_record(&conn, "cleanup", "record 2", "yesterday");
+        let rt_id = insert_recurring_task(&conn, "cleanup", "recurring", "Daily 9AM");
+
+        let affected = batch_delete_items(&conn, &[id5, id6, rt_id]).unwrap();
+        assert_eq!(affected, 3);
+
+        assert!(get_item(&conn, id5).is_err());
+        assert!(get_item(&conn, id6).is_err());
+        assert!(get_item(&conn, rt_id).is_err());
+
+        // Test 3: Empty IDs returns 0
+        let affected = batch_delete_items(&conn, &[]).unwrap();
+        assert_eq!(affected, 0);
+
+        // Test 4: Non-existent IDs (graceful handling)
+        let affected = batch_delete_items(&conn, &[999999, 888888]).unwrap();
+        assert_eq!(affected, 0);
+
+        // Verify remaining items still exist
+        assert!(get_item(&conn, id3).is_ok());
+        assert!(get_item(&conn, id4).is_ok());
     }
 
     #[test]

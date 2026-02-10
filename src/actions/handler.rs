@@ -29,7 +29,7 @@ pub fn handle_commands(conn: &Connection, args: CliArgs) -> Result<(), String> {
         },
         Action::Ops(ops_cmd) => match ops_cmd {
             OpsCommand::Stat(cmd) => ops::handle_statcmd(conn, &cmd),
-            OpsCommand::Batch(_) => Err("ops batch not yet implemented".to_string()),
+            OpsCommand::Batch(cmd) => ops::handle_batchcmd(conn, &cmd),
         },
     }
 }

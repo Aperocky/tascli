@@ -32,7 +32,9 @@ pub fn print_items(items: &[Item], is_record: bool, is_list: bool) {
         } else {
             "N/A".to_string()
         };
-        if is_record {
+        // Check each item's actual type instead of using a global boolean
+        let item_is_record = item.action == "record" || item.action == "recurring_task_record";
+        if item_is_record {
             results.push(DisplayRow::from_record(indexstr, item));
         } else {
             results.push(DisplayRow::from_task(indexstr, item))

@@ -212,7 +212,8 @@ pub struct OpsStatCommand {
 
 #[derive(Debug, Args)]
 pub struct OpsBatchCommand {
-    /// type of actions for update operation to run on - all or task or record; For all, only
+    /// type of actions for update operation to run on - all or
+    /// task|record|recurring_task|recurring_record; For all, only
     /// modifying category is supported
     #[arg(short, long, default_value_t = String::from("all"))]
     pub action: String,
@@ -227,24 +228,24 @@ pub struct OpsBatchCommand {
     /// if this is date only, then it is inclusive
     #[arg(short, long, value_parser = validate_timestr)]
     pub ending_time: Option<String>,
-    /// modify the current selection to this category
+    /// delete the selected items in question
+    #[arg(short, long, default_value_t = false)]
+    pub delete: bool,
+    /// interactively process selected items item by item (y/n)
+    #[arg(short, long, default_value_t = false)]
+    pub interactive: bool,
+    /// modify the current selected items to this category
     #[arg(short = 't', long)]
     pub category_to: Option<String>,
     /// modify the tasks selected to this status
-    /// only work with action:task
+    /// only work with tasks, not records.
     /// accept ongoing|done|cancelled|duplicate|suspended|pending
-    #[arg(short, long, value_parser = parse_status)]
-    pub status: Option<u8>,
-    /// update the due date of tasks
+    #[arg(long, value_parser = parse_status)]
+    pub status_to: Option<u8>,
+    /// bulk update the due date of tasks
     /// only work with action:task
-    #[arg(short, long, value_parser = validate_timestr)]
-    pub target_time: Option<String>,
-    /// delete the selection in question
-    #[arg(short, long, default_value_t = false)]
-    pub delete: bool,
-    /// interactively process task by task
-    #[arg(short, long, default_value_t = false)]
-    pub interactive: bool,
+    #[arg(long, value_parser = validate_timestr)]
+    pub target_time_to: Option<String>,
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
