@@ -8,6 +8,10 @@ use rusqlite::Connection;
 use crate::{
     actions::{
         display,
+        list::{
+            CLOSED_STATUS_CODES,
+            OPEN_STATUS_CODES,
+        },
         ops::backup::backup_path,
     },
     args::{
@@ -31,8 +35,20 @@ use crate::{
 pub fn handle_batchcmd(conn: &Connection, cmd: &OpsBatchCommand) -> Result<(), String> {
     let actions = parse_action_filter(&cmd.action)?;
 
-    if cmd.action == "all" && (cmd.status_to.is_some() || cmd.target_time_to.is_some()) {
-        return Err("Cannot set status or target_time when action is 'all'".to_string());
+    if cmd.action != "task"
+        && (cmd.status_to.is_some() || cmd.target_time_to.is_some() || cmd.status.is_some())
+    {
+        return Err(
+            "--status, --status-to and --target-time-to are only valid with --action task"
+                .to_string(),
+        );
+    }
+
+    if cmd.status_to.is_some_and(|s| s >= 240) {
+        return Err(
+            "--status-to requires a concrete status: ongoing|done|cancelled|duplicate|suspended|removed|pending"
+                .to_string(),
+        );
     }
 
     if !cmd.delete
@@ -61,6 +77,7 @@ pub fn handle_batchcmd(conn: &Connection, cmd: &OpsBatchCommand) -> Result<(), S
         conn,
         actions.as_ref(),
         cmd.category.as_deref(),
+        cmd.status,
         create_time_min,
         create_time_max,
     )?;
@@ -257,6 +274,7 @@ fn query_items_for_batch(
     conn: &Connection,
     actions: Option<&Vec<String>>,
     category: Option<&str>,
+    status: Option<u8>,
     create_time_min: Option<i64>,
     create_time_max: Option<i64>,
 ) -> Result<Vec<Item>, String> {
@@ -272,6 +290,12 @@ fn query_items_for_batch(
     }
     if let Some(max) = create_time_max {
         query = query.with_create_time_max(max);
+    }
+    match status {
+        None | Some(255) => {}
+        Some(254) => query = query.with_statuses(OPEN_STATUS_CODES.to_vec()),
+        Some(253) => query = query.with_statuses(CLOSED_STATUS_CODES.to_vec()),
+        Some(s) => query = query.with_statuses(vec![s]),
     }
     query_items(conn, &query).map_err(|e| e.to_string())
 }
@@ -308,6 +332,73 @@ mod tests {
     };
 
     #[test]
+    fn test_non_task_action_rejects_task_only_args() {
+        let (conn, _temp_file) = get_test_conn();
+        let base = OpsBatchCommand {
+            action: "all".to_string(),
+            category: None,
+            starting_time: None,
+            ending_time: None,
+            delete: false,
+            interactive: false,
+            category_to: None,
+            status_to: None,
+            target_time_to: None,
+            status: None,
+        };
+
+        let failing = vec![
+            (
+                "--status-to",
+                OpsBatchCommand {
+                    action: "all".to_string(),
+                    status_to: Some(1),
+                    category_to: Some("x".to_string()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "--target-time-to",
+                OpsBatchCommand {
+                    action: "all".to_string(),
+                    target_time_to: Some("tomorrow".to_string()),
+                    category_to: Some("x".to_string()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "--status",
+                OpsBatchCommand {
+                    action: "record".to_string(),
+                    status: Some(1),
+                    category_to: Some("x".to_string()),
+                    ..base.clone()
+                },
+            ),
+        ];
+        for (expected, cmd) in &failing {
+            let err = handle_batchcmd(&conn, cmd).unwrap_err();
+            assert!(
+                err.contains(expected),
+                "expected '{}' in error: {}",
+                expected,
+                err
+            );
+        }
+
+        // aggregate status values rejected for --status-to
+        for aggregate in [240u8, 253, 254, 255] {
+            let result = handle_batchcmd(&conn, &OpsBatchCommand {
+                action: "task".to_string(),
+                status_to: Some(aggregate),
+                ..base.clone()
+            });
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("concrete status"));
+        }
+    }
+
+    #[test]
     fn test_parse_action_filter() {
         assert_eq!(parse_action_filter("all").unwrap(), None);
         assert_eq!(
@@ -330,18 +421,18 @@ mod tests {
         insert_record(&conn, "work", "record 1", "yesterday");
 
         assert_eq!(
-            query_items_for_batch(&conn, None, None, None, None)
+            query_items_for_batch(&conn, None, None, None, None, None)
                 .unwrap()
                 .len(),
             4
         );
 
         let actions = Some(vec!["task".to_string()]);
-        let items = query_items_for_batch(&conn, actions.as_ref(), None, None, None).unwrap();
+        let items = query_items_for_batch(&conn, actions.as_ref(), None, None, None, None).unwrap();
         assert_eq!(items.len(), 3);
         assert!(items.iter().all(|i| i.action == "task"));
 
-        let items = query_items_for_batch(&conn, None, Some("work"), None, None).unwrap();
+        let items = query_items_for_batch(&conn, None, Some("work"), None, None, None).unwrap();
         assert_eq!(items.len(), 3);
         assert!(items.iter().all(|i| i.category == "work"));
     }
@@ -355,7 +446,7 @@ mod tests {
 
         let actions = Some(vec!["task".to_string()]);
         let items =
-            query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
+            query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None, None).unwrap();
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
 
         let updates = ItemUpdates {
@@ -407,7 +498,7 @@ mod tests {
 
         let actions = Some(vec!["task".to_string()]);
         let items =
-            query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None).unwrap();
+            query_items_for_batch(&conn, actions.as_ref(), Some("work"), None, None, None).unwrap();
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
 
         assert_eq!(batch_delete_items(&conn, &item_ids).unwrap(), 2);
@@ -425,7 +516,7 @@ mod tests {
         let rt_id = insert_recurring_task(&conn, "work", "standup", "Daily 9AM");
         insert_recurring_record(&conn, "work", "standup done", rt_id, 1000);
 
-        let items = query_items_for_batch(&conn, None, Some("work"), None, None).unwrap();
+        let items = query_items_for_batch(&conn, None, Some("work"), None, None, None).unwrap();
         assert_eq!(items.len(), 3);
 
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
@@ -437,7 +528,7 @@ mod tests {
         assert_eq!(batch_update_items(&conn, &item_ids, &updates).unwrap(), 3);
 
         assert_eq!(
-            query_items_for_batch(&conn, None, Some("standup"), None, None)
+            query_items_for_batch(&conn, None, Some("standup"), None, None, None)
                 .unwrap()
                 .len(),
             3
@@ -454,14 +545,14 @@ mod tests {
         let start = timestr::to_unix_epoch("2025/02/22").unwrap();
         let end = timestr::to_unix_epoch("2025/02/27").unwrap();
         let items =
-            query_items_for_batch(&conn, None, Some("test"), Some(start), Some(end)).unwrap();
+            query_items_for_batch(&conn, None, Some("test"), None, Some(start), Some(end)).unwrap();
         assert_eq!(items.len(), 1);
         assert!(items[0].content.contains("record 2"));
 
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
         assert_eq!(batch_delete_items(&conn, &item_ids).unwrap(), 1);
         assert_eq!(
-            query_items_for_batch(&conn, None, Some("test"), None, None)
+            query_items_for_batch(&conn, None, Some("test"), None, None, None)
                 .unwrap()
                 .len(),
             2
@@ -476,7 +567,7 @@ mod tests {
         insert_record(&conn, "personal", "record 1", "yesterday");
         insert_record(&conn, "personal", "record 2", "today");
 
-        let items = query_items_for_batch(&conn, None, Some("personal"), None, None).unwrap();
+        let items = query_items_for_batch(&conn, None, Some("personal"), None, None, None).unwrap();
         assert_eq!(items.len(), 4);
 
         let item_ids: Vec<i64> = items.iter().map(|i| i.id.unwrap()).collect();
@@ -487,9 +578,40 @@ mod tests {
         };
         assert_eq!(batch_update_items(&conn, &item_ids, &updates).unwrap(), 4);
 
-        let items = query_items_for_batch(&conn, None, Some("person"), None, None).unwrap();
+        let items = query_items_for_batch(&conn, None, Some("person"), None, None, None).unwrap();
         assert_eq!(items.iter().filter(|i| i.action == "task").count(), 2);
         assert_eq!(items.iter().filter(|i| i.action == "record").count(), 2);
+    }
+
+    #[test]
+    fn test_batch_status_filter() {
+        let (conn, _temp_file) = get_test_conn();
+        let id1 = insert_task(&conn, "work", "task 1", "today");
+        let id2 = insert_task(&conn, "work", "task 2", "today");
+        let id3 = insert_task(&conn, "work", "task 3", "today");
+        update_status(&conn, id1, 1); // done
+        update_status(&conn, id2, 2); // cancelled
+                                      // id3 remains ongoing (0)
+
+        // Filter by open (254 = ongoing|suspended|pending)
+        let items =
+            query_items_for_batch(&conn, None, Some("work"), Some(254), None, None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id.unwrap(), id3);
+
+        // Filter by closed (253 = done|cancelled|duplicate|removed)
+        let items =
+            query_items_for_batch(&conn, None, Some("work"), Some(253), None, None).unwrap();
+        assert_eq!(items.len(), 2);
+
+        // Filter by specific status (done = 1)
+        let items = query_items_for_batch(&conn, None, Some("work"), Some(1), None, None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id.unwrap(), id1);
+
+        // No filter / all (255) returns everything
+        let items = query_items_for_batch(&conn, None, Some("work"), None, None, None).unwrap();
+        assert_eq!(items.len(), 3);
     }
 
     #[test]
@@ -510,7 +632,7 @@ mod tests {
         );
         assert_eq!(apply_operation(&conn, &[id2], true, None).unwrap(), 1);
 
-        let items = query_items_for_batch(&conn, None, Some("work"), None, None).unwrap();
+        let items = query_items_for_batch(&conn, None, Some("work"), None, None, None).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id.unwrap(), id3);
     }

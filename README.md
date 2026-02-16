@@ -156,6 +156,47 @@ Records List:
 ----------------------------------------------------------------------------------------------
 ```
 
+### Housekeeping
+
+`ops` commands can be used to stat, migrate categories, batch close or delete tasks and record:
+
+```
+$ tascli ops stat
+Statistics:
+---------------------------------------------------------------------------------------------
+| Category            | Task        | Record      | Recur Task  | Recur Record| Total       |
+---------------------------------------------------------------------------------------------
+| life                | 22          | 14          | 7           | 17          | 60          |
+| baby                | 9           | 19          | 1           | 11          | 40          |
+| tascli              | 28          | 5           | 0           | 0           | 33          |
+| personal            | 5           | 3           | 2           | 11          | 21          |
+...
+```
+
+Example merge of category `sport` into `personal`, the `ops batch` command support `--interactive` flag so you can be selective in your changes. Each time more than one item is changed, a backup automatically happens.
+
+```
+$ tascli ops batch -c sport --category-to personal
+backing up database prior to batch operation
+Backed up to: /Users/aperocky/.local/share/tascli/tascli_bak.db
+Found 2 items matching filters:
+---------------------------------------------------------------------------------------
+| Index  | Category            | Content                        | Time                |
+---------------------------------------------------------------------------------------
+| 1      | sport               | Do a FTP test                  | 2025/03/30 (        |
+|        |                     |                                | completed)          |
+---------------------------------------------------------------------------------------
+| 2      | sport               | Nice run today 5K, finally sub | 2025/3/29 10:28PM   |
+|        |                     | 140 HR for sub 6 pace          |                     |
+---------------------------------------------------------------------------------------
+
+Operation to apply:
+  • Change category to: personal
+
+Proceed? (y/n): y
+✓ Successfully updated 2 items
+```
+
 ### Time Format
 
 This application accepts flexible time strings in various formats:
@@ -199,21 +240,23 @@ Commands:
   update  Update tasks or records wording/deadlines
   delete  Delete Records or Tasks
   list    list tasks or records
+  ops     operations and statistics
   help    Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
   -V, --version  Print version
-aperocky@~$ tascli task -h
-add task with end time
 
-Usage: tascli task [OPTIONS] <CONTENT> [TIMESTR]
+aperocky@~$ tascli list -h
+list tasks or records
 
-Arguments:
-  <CONTENT>  Description of the task
-  [TIMESTR]  Time the task is due, default to EOD
+Usage: tascli list <COMMAND>
+
+Commands:
+  task    list tasks
+  record  list records
+  show    show specific listed item content directly for ease to copy
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
-  -c, --category <CATEGORY>  Category of the task
-  -h, --help                 Print help
-```
+  -h, --help  Print help

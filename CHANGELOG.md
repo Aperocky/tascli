@@ -1,9 +1,14 @@
 # Changelog
 
+### v0.11.1
+- ✨ Added `--status` filter to batch command
+- 🐛 Fix `--status-to` to only allow concrete (non-aggregate) statuses
+- 📝 Update readme to include a section for ops
+
 ### v0.11.0
 - ✨ Added `ops` commands for operations and visibility
-- ✨ `ops stat` to have a holistic view of all of your tasks, records and recurring ones by category and time.
-- ✨ `ops batch` to batch update categories, status and due dates.
+- ✨ `ops stat` to have a holistic view of all of your tasks, records and recurring ones by category and time
+- ✨ `ops batch` to batch update categories, status and due dates
 - ✨ `ops backup` to backup your table (convenience function), also backups automatically for batch commands
 
 ### v0.10.2

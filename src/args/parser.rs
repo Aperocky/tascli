@@ -212,7 +212,7 @@ pub struct OpsStatCommand {
     pub ending_time: Option<String>,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct OpsBatchCommand {
     /// type of actions for update operation to run on - all or
     /// task|record|recurring_task|recurring_record; For all, only
@@ -222,6 +222,10 @@ pub struct OpsBatchCommand {
     /// category of the selection at current time
     #[arg(short, long)]
     pub category: Option<String>,
+    /// status of the selection at current time
+    /// accept ongoing|done|cancelled|duplicate|suspended|pending|open|closed|all
+    #[arg(long, value_parser = parse_status)]
+    pub status: Option<u8>,
     /// Starting time of the current selection
     /// if this is date only, then it is non-inclusive
     #[arg(short, long, value_parser = validate_timestr)]
@@ -240,7 +244,7 @@ pub struct OpsBatchCommand {
     #[arg(short = 't', long)]
     pub category_to: Option<String>,
     /// modify the tasks selected to this status
-    /// only work with tasks, not records.
+    /// only work with tasks, require concrete status
     /// accept ongoing|done|cancelled|duplicate|suspended|pending
     #[arg(long, value_parser = parse_status)]
     pub status_to: Option<u8>,
