@@ -61,12 +61,13 @@ pub(crate) fn handle_next_page(conn: &Connection) -> Offset {
         Ok(item) => item,
         Err(_) => return Offset::None,
     };
+    let id = end_item.id.unwrap();
     if end_item.action == TASK {
-        return Offset::TargetTime(end_item.target_time.unwrap());
+        return Offset::TargetTime(end_item.target_time.unwrap(), id);
     } else if end_item.action == RECURRING_TASK {
-        return Offset::Id(end_item.id.unwrap());
+        return Offset::Id(id);
     } else if end_item.action == RECORD || end_item.action == RECURRING_TASK_RECORD {
-        return Offset::CreateTime(end_item.create_time);
+        return Offset::CreateTime(end_item.create_time, id);
     }
     Offset::None
 }

@@ -226,7 +226,7 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
     if cmd.next_page {
         offset = handle_next_page(conn);
         match offset {
-            Offset::TargetTime(_) => {}
+            Offset::TargetTime(..) => {}
             Offset::Id(_) => offset = Offset::None, // Transition from recurring to regular tasks
             Offset::None => return Err("No next page available".to_string()),
             _ => return Ok(Vec::new()), // Wrong offset type, skip regular tasks query

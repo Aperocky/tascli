@@ -120,22 +120,18 @@ pub fn query_items(
         params.push(format!("%{}%", content));
     }
 
-    let ct_min = if let Offset::CreateTime(time) = item_query.offset {
-        Some(time)
-    } else {
-        item_query.create_time_min
-    };
-    if let Some(time) = ct_min {
+    if let Offset::CreateTime(time, id) = item_query.offset {
+        conditions.push("(create_time > ? OR (create_time = ? AND id > ?))".to_string());
+        params.extend([time.to_string(), time.to_string(), id.to_string()]);
+    } else if let Some(time) = item_query.create_time_min {
         conditions.push("create_time > ?".to_string());
         params.push(time.to_string());
     }
 
-    let tt_min = if let Offset::TargetTime(time) = item_query.offset {
-        Some(time)
-    } else {
-        item_query.target_time_min
-    };
-    if let Some(time) = tt_min {
+    if let Offset::TargetTime(time, id) = item_query.offset {
+        conditions.push("(target_time > ? OR (target_time = ? AND id > ?))".to_string());
+        params.extend([time.to_string(), time.to_string(), id.to_string()]);
+    } else if let Some(time) = item_query.target_time_min {
         conditions.push("target_time > ?".to_string());
         params.push(time.to_string());
     }
@@ -187,8 +183,8 @@ pub fn query_items(
 
     let order_column = match item_query.offset {
         Offset::Id(_) => "id",
-        Offset::CreateTime(_) => "create_time",
-        Offset::TargetTime(_) => "target_time",
+        Offset::CreateTime(_, _) => "create_time",
+        Offset::TargetTime(_, _) => "target_time",
         Offset::None => item_query.order_by.unwrap_or("id"),
     };
     if !VALID_ORDER_COLUMNS.contains(&order_column) {
@@ -220,6 +216,7 @@ pub fn query_items(
 mod tests {
     use super::*;
     use crate::{
+        args::timestr,
         db::item::{
             Item,
             RECORD,
@@ -449,27 +446,27 @@ mod tests {
         let last_item = items.last().unwrap();
         assert_eq!(last_item.content, "index 5");
         let offset_target_time = last_item.target_time.unwrap();
+        let offset_id = last_item.id.unwrap();
 
         let next_items = query_items(
             &conn,
             &ItemQuery::new()
                 .with_action(TASK)
                 .with_limit(5)
-                .with_offset(Offset::TargetTime(offset_target_time)),
+                .with_offset(Offset::TargetTime(offset_target_time, offset_id)),
         )
         .unwrap();
         assert_eq!(next_items.len(), 5);
         assert_eq!(next_items.first().unwrap().content, "index 6");
         let last_item = next_items.last().unwrap();
         assert_eq!(last_item.content, "index 10");
-        let offset_target_time = last_item.target_time.unwrap();
 
         let next_items = query_items(
             &conn,
             &ItemQuery::new()
                 .with_action(TASK)
                 .with_limit(5)
-                .with_offset(Offset::TargetTime(offset_target_time)),
+                .with_offset(Offset::TargetTime(last_item.target_time.unwrap(), last_item.id.unwrap())),
         )
         .unwrap();
         assert_eq!(next_items.len(), 1);
@@ -505,7 +502,7 @@ mod tests {
             &ItemQuery::new()
                 .with_action(RECORD)
                 .with_limit(5)
-                .with_offset(Offset::CreateTime(last_item.create_time)),
+                .with_offset(Offset::CreateTime(last_item.create_time, last_item.id.unwrap())),
         )
         .unwrap();
         assert_eq!(next_items.len(), 5);
@@ -518,11 +515,46 @@ mod tests {
             &ItemQuery::new()
                 .with_action(RECORD)
                 .with_limit(5)
-                .with_offset(Offset::CreateTime(last_item.create_time)),
+                .with_offset(Offset::CreateTime(last_item.create_time, last_item.id.unwrap())),
         )
         .unwrap();
         assert_eq!(next_items.len(), 1);
         assert_eq!(next_items[0].content, "index 11");
+    }
+
+    #[test]
+    fn test_offset_tie_breaking() {
+        // Tasks sharing the same target_time must not be skipped during pagination
+        let (conn, _temp_file) = get_test_conn();
+        let shared_time = timestr::to_unix_epoch("tomorrow").unwrap();
+        for i in 1..=6 {
+            let item = Item::with_target_time(TASK.to_string(), "test".to_string(), format!("task {}", i), Some(shared_time));
+            insert_item(&conn, &item).unwrap();
+        }
+
+        let page1 = query_items(&conn, &ItemQuery::new().with_action(TASK).with_limit(3).with_order_by("target_time")).unwrap();
+        assert_eq!(page1.len(), 3);
+        let last = page1.last().unwrap();
+
+        let page2 = query_items(&conn, &ItemQuery::new().with_action(TASK).with_limit(3)
+            .with_offset(Offset::TargetTime(last.target_time.unwrap(), last.id.unwrap()))).unwrap();
+        assert_eq!(page2.len(), 3, "tie-breaking must not skip items with same target_time");
+
+        // Same for CreateTime
+        let (conn, _temp_file) = get_test_conn();
+        let shared_time = timestr::to_unix_epoch("yesterday").unwrap();
+        for i in 1..=6 {
+            let item = Item::with_create_time(RECORD.to_string(), "test".to_string(), format!("rec {}", i), shared_time);
+            insert_item(&conn, &item).unwrap();
+        }
+
+        let page1 = query_items(&conn, &ItemQuery::new().with_action(RECORD).with_limit(3).with_order_by("create_time")).unwrap();
+        assert_eq!(page1.len(), 3);
+        let last = page1.last().unwrap();
+
+        let page2 = query_items(&conn, &ItemQuery::new().with_action(RECORD).with_limit(3)
+            .with_offset(Offset::CreateTime(last.create_time, last.id.unwrap()))).unwrap();
+        assert_eq!(page2.len(), 3, "tie-breaking must not skip items with same create_time");
     }
 
     #[test]

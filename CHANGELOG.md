@@ -1,5 +1,8 @@
 # Changelog
 
+### v0.11.2
+- 🐛 Fix list pagination bug where items with exact same timestamp become potentially omitted at the point of next token
+
 ### v0.11.1
 - ✨ Added `--status` filter to batch command
 - 🐛 Fix `--status-to` to only allow concrete (non-aggregate) statuses

@@ -150,8 +150,8 @@ pub struct ItemQuery<'a> {
 pub enum Offset {
     None,
     Id(i64),
-    CreateTime(i64),
-    TargetTime(i64),
+    CreateTime(i64, i64), // (time, id) for tie-breaking
+    TargetTime(i64, i64), // (time, id) for tie-breaking
 }
 
 #[allow(dead_code)]

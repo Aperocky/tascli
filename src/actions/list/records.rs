@@ -74,7 +74,7 @@ fn query_records(conn: &Connection, cmd: &ListRecordCommand) -> Result<Vec<Item>
     if cmd.next_page {
         offset = handle_next_page(conn);
         match offset {
-            Offset::CreateTime(_) => {}
+            Offset::CreateTime(..) => {}
             Offset::None => return Err("No next page available".to_string()),
             _ => return Err("next page not meant for this call".to_string()),
         }
