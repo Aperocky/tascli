@@ -1,5 +1,5 @@
 mod backup;
-mod batch;
+pub(crate) mod batch;
 mod stat;
 
 pub use backup::handle_backupcmd;

@@ -6,12 +6,17 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    actions::display,
+    actions::{
+        display,
+        list::query_all_tasks,
+        ops::batch::prompt_y_n_q,
+    },
     args::{
         cron,
         parser::{
             DeleteCommand,
             DoneCommand,
+            ListTaskCommand,
             UpdateCommand,
         },
         timestr,
@@ -36,11 +41,129 @@ use crate::{
 };
 
 pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String> {
-    validate_cache(conn)?;
-    let row_id = get_rowid_from_cache(conn, cmd.index)?;
-    let status = cmd.status;
+    if let Ok(index) = cmd.target.trim().parse::<usize>() {
+        return handle_done_by_index(conn, index, cmd.status, cmd.comment.as_deref());
+    }
+    match cmd.target.trim() {
+        "today" => handle_done_today(conn, cmd.status, cmd.comment.as_deref()),
+        "overdue" => handle_done_overdue(conn, cmd.status, cmd.comment.as_deref()),
+        other => Err(format!("Unknown target '{}'. Expected an index, 'today', or 'overdue'", other)),
+    }
+}
 
+fn handle_done_by_index(
+    conn: &Connection,
+    index: usize,
+    status: u8,
+    comment: Option<&str>,
+) -> Result<(), String> {
+    validate_cache(conn)?;
+    let row_id = get_rowid_from_cache(conn, index)?;
     let mut item = get_item(conn, row_id).map_err(|e| format!("Failed to get item: {:?}", e))?;
+    complete_item(conn, &mut item, status, comment)
+}
+
+fn handle_done_today(
+    conn: &Connection,
+    status: u8,
+    comment: Option<&str>,
+) -> Result<(), String> {
+    let list_cmd = ListTaskCommand {
+        timestr: Some("today".to_string()),
+        category: None,
+        days: None,
+        status: 254,
+        overdue: false,
+        limit: 100,
+        next_page: false,
+        search: None,
+    };
+    run_interactive_done(conn, &list_cmd, "No open tasks found for today", status, comment)
+}
+
+fn handle_done_overdue(
+    conn: &Connection,
+    status: u8,
+    comment: Option<&str>,
+) -> Result<(), String> {
+    let list_cmd = ListTaskCommand {
+        timestr: Some("today".to_string()),
+        category: None,
+        days: None,
+        status: 254,
+        overdue: true,
+        limit: 100,
+        next_page: false,
+        search: None,
+    };
+    run_interactive_done(conn, &list_cmd, "No open overdue tasks found", status, comment)
+}
+
+fn run_interactive_done(
+    conn: &Connection,
+    list_cmd: &ListTaskCommand,
+    empty_msg: &str,
+    status: u8,
+    comment: Option<&str>,
+) -> Result<(), String> {
+    let (tasks, _, _) = query_all_tasks(conn, list_cmd)?;
+
+    if tasks.is_empty() {
+        display::print_bold(empty_msg);
+        return Ok(());
+    }
+
+    let total = tasks.len();
+    display::print_bold(&format!("Interactive done: {} tasks found", total));
+
+    let mut completed = 0;
+    let mut skipped = 0;
+
+    for (idx, item) in tasks.iter().enumerate() {
+        println!();
+        display::print_bold(&format!("Task {}/{}:", idx + 1, total));
+        display::print_items(std::slice::from_ref(item), false);
+
+        match prompt_y_n_q("Done")? {
+            'y' => {
+                let mut item = item.clone();
+                match complete_item(conn, &mut item, status, comment) {
+                    Ok(()) => completed += 1,
+                    Err(e) => {
+                        display::print_red(&format!("Error: {}", e));
+                        skipped += 1;
+                    }
+                }
+            }
+            'n' => skipped += 1,
+            'q' => {
+                let remaining = total - idx - 1;
+                display::print_bold(&format!(
+                    "✓ Completed {}, skipped {}, quit with {} remaining",
+                    pluralize(completed, "task"),
+                    skipped,
+                    remaining
+                ));
+                return Ok(());
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    display::print_bold(&format!(
+        "✓ Completed {}, skipped {}",
+        pluralize(completed, "task"),
+        skipped
+    ));
+    Ok(())
+}
+
+fn complete_item(
+    conn: &Connection,
+    item: &mut Item,
+    status: u8,
+    comment: Option<&str>,
+) -> Result<(), String> {
     if item.action == RECORD || item.action == RECURRING_TASK_RECORD {
         return Err("Cannot complete a record".to_string());
     }
@@ -71,9 +194,9 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
         let next_occurrence = cron::get_next_occurrence(cron_schedule)?;
 
         let mut record_content = format!("Completed Recurring Task: {}", item.content);
-        if let Some(comment) = &cmd.comment {
+        if let Some(c) = comment {
             record_content.push('\n');
-            record_content.push_str(comment);
+            record_content.push_str(c);
         }
 
         let completion_record = Item::create_recurring_record(
@@ -86,13 +209,13 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
             .map_err(|e| format!("Failed to create completion record: {:?}", e))?;
 
         display::print_bold("Completed Recurring Task:");
-        display::print_items(&[item], false);
+        display::print_items(std::slice::from_ref(item), false);
         return Ok(());
     }
 
-    if let Some(comment) = &cmd.comment {
+    if let Some(c) = comment {
         item.content.push('\n');
-        item.content.push_str(comment);
+        item.content.push_str(c);
     }
 
     let completion_content = format!("Completed Task: {}", item.content);
@@ -105,10 +228,18 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
         .map_err(|e| format!("Failed to create completion record: {:?}", e))?;
 
     item.status = status;
-    update_item(conn, &item).map_err(|e| format!("Failed to update item: {:?}", e))?;
+    update_item(conn, item).map_err(|e| format!("Failed to update item: {:?}", e))?;
     display::print_bold("Completed Task:");
-    display::print_items(&[item], false);
+    display::print_items(std::slice::from_ref(item), false);
     Ok(())
+}
+
+fn pluralize(n: usize, word: &str) -> String {
+    if n == 1 {
+        format!("{} {}", n, word)
+    } else {
+        format!("{} {}s", n, word)
+    }
 }
 
 pub fn handle_deletecmd(conn: &Connection, cmd: &DeleteCommand) -> Result<(), String> {
@@ -259,7 +390,7 @@ mod tests {
         cache::store(&conn, &items).unwrap();
 
         let done_cmd = DoneCommand {
-            index: 1,
+            target: "1".to_string(),
             status: 1,
             comment: None,
         };
@@ -274,7 +405,7 @@ mod tests {
         assert_eq!(records[0].category, "work");
 
         let done_cmd = DoneCommand {
-            index: 1,
+            target: "1".to_string(),
             status: 2,
             comment: None,
         };
@@ -294,7 +425,7 @@ mod tests {
         cache::store(&conn, &items).unwrap();
 
         let done_cmd = DoneCommand {
-            index: 1,
+            target: "1".to_string(),
             status: 1,
             comment: Some("Added extra analysis section".to_string()),
         };
@@ -385,7 +516,7 @@ mod tests {
         cache::store(&conn, &items).unwrap();
 
         let done_cmd = DoneCommand {
-            index: 1,
+            target: "1".to_string(),
             status: 1,
             comment: Some("Discussed sprint goals".to_string()),
         };
@@ -404,7 +535,7 @@ mod tests {
         assert!(records[0].good_until.is_some());
 
         let done_cmd2 = DoneCommand {
-            index: 1,
+            target: "1".to_string(),
             status: 1,
             comment: None,
         };

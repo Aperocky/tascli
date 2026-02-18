@@ -4,6 +4,7 @@ mod tasks;
 pub use records::handle_listrecords;
 use rusqlite::Connection;
 pub use tasks::handle_listtasks;
+pub use tasks::query_all_tasks;
 
 use crate::{
     args::parser::ShowContentCommand,

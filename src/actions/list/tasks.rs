@@ -29,61 +29,13 @@ use crate::{
 };
 
 pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), String> {
-    let recurring_tasks = match query_recurring_tasks(conn, &cmd) {
-        Ok(tasks) => tasks,
+    let (all_tasks, recurring_hit_limit, last_queried_recurring) = match query_all_tasks(conn, &cmd)
+    {
+        Ok(result) => result,
         Err(estr) => {
             display::print_bold(&estr);
             return Ok(());
         }
-    };
-
-    let recurring_hit_limit = recurring_tasks.len() == cmd.limit;
-    let last_queried_recurring = if recurring_hit_limit {
-        recurring_tasks.last().cloned()
-    } else {
-        None
-    };
-
-    // Mark completion status for all recurring tasks
-    let recurring_tasks = mark_recurring_task_by_completion(conn, recurring_tasks)?;
-    let recurring_tasks = if cmd.status == 255 {
-        recurring_tasks
-    } else if cmd.status == 253 || cmd.status == 1 {
-        // 253 = closed statuses; 1 = done, show only completed tasks
-        recurring_tasks
-            .into_iter()
-            .filter(|t| t.recurring_interval_complete)
-            .collect()
-    } else {
-        // All other statuses show only incomplete tasks
-        recurring_tasks
-            .into_iter()
-            .filter(|t| !t.recurring_interval_complete)
-            .collect()
-    };
-    let recurring_tasks = filter_recurring_task_by_time(recurring_tasks, &cmd)?;
-
-    let all_tasks = if recurring_hit_limit {
-        // If recurring tasks hit the limit, don't query regular tasks yet
-        // There might be more recurring tasks on the next page
-        recurring_tasks
-    } else {
-        // Recurring tasks didn't hit limit, safe to query and combine with regular tasks
-        let regular_tasks = match query_tasks(conn, &cmd) {
-            Ok(tasks) => tasks,
-            Err(estr) => {
-                display::print_bold(&estr);
-                return Ok(());
-            }
-        };
-
-        // Combine both lists
-        let mut all_tasks = Vec::new();
-        all_tasks.extend(recurring_tasks);
-        all_tasks.extend(regular_tasks);
-        all_tasks.truncate(cmd.limit);
-
-        all_tasks
     };
 
     if all_tasks.is_empty() {
@@ -113,6 +65,52 @@ pub fn handle_listtasks(conn: &Connection, cmd: ListTaskCommand) -> Result<(), S
     display::print_bold("Tasks List:");
     display::print_items(&all_tasks, true);
     Ok(())
+}
+
+pub fn query_all_tasks(
+    conn: &Connection,
+    cmd: &ListTaskCommand,
+) -> Result<(Vec<Item>, bool, Option<Item>), String> {
+    let recurring_tasks = query_recurring_tasks(conn, cmd)?;
+
+    let recurring_hit_limit = recurring_tasks.len() == cmd.limit;
+    let last_queried_recurring = if recurring_hit_limit {
+        recurring_tasks.last().cloned()
+    } else {
+        None
+    };
+
+    // Mark completion status for all recurring tasks
+    let recurring_tasks = mark_recurring_task_by_completion(conn, recurring_tasks)?;
+    let recurring_tasks = if cmd.status == 255 {
+        recurring_tasks
+    } else if cmd.status == 253 || cmd.status == 1 {
+        // 253 = closed statuses; 1 = done, show only completed tasks
+        recurring_tasks
+            .into_iter()
+            .filter(|t| t.recurring_interval_complete)
+            .collect()
+    } else {
+        // All other statuses show only incomplete tasks
+        recurring_tasks
+            .into_iter()
+            .filter(|t| !t.recurring_interval_complete)
+            .collect()
+    };
+    let recurring_tasks = filter_recurring_task_by_time(recurring_tasks, cmd)?;
+
+    let all_tasks = if recurring_hit_limit {
+        recurring_tasks
+    } else {
+        let regular_tasks = query_tasks(conn, cmd)?;
+        let mut all_tasks = Vec::new();
+        all_tasks.extend(recurring_tasks);
+        all_tasks.extend(regular_tasks);
+        all_tasks.truncate(cmd.limit);
+        all_tasks
+    };
+
+    Ok((all_tasks, recurring_hit_limit, last_queried_recurring))
 }
 
 // Some cmd query argument do not apply - moved to application layer.

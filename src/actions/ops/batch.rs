@@ -170,7 +170,7 @@ fn execute_interactive(
         display::print_bold(&format!("Item {}/{}:", idx + 1, total));
         display::print_items(std::slice::from_ref(item), false);
 
-        match prompt_y_n_q()? {
+        match prompt_y_n_q("Apply")? {
             'y' => {
                 apply_operation(conn, &[item.id.unwrap()], cmd.delete, updates)?;
                 accepted += 1;
@@ -232,9 +232,9 @@ fn print_operation_description(cmd: &OpsBatchCommand) {
     }
 }
 
-fn prompt_y_n_q() -> Result<char, String> {
+pub(crate) fn prompt_y_n_q(prompt: &str) -> Result<char, String> {
     loop {
-        print!("Apply? (y/n/q): ");
+        print!("{} (y/n/q): ", prompt);
         io::stdout().flush().unwrap();
         let mut input = String::new();
         io::stdin()

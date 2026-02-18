@@ -66,9 +66,8 @@ pub struct RecordCommand {
 
 #[derive(Debug, Args)]
 pub struct DoneCommand {
-    /// index from previous list command
-    #[arg(value_parser = validate_index)]
-    pub index: usize,
+    /// index from previous list command, or timestr (e.g. 'today') for interactive completion
+    pub target: String,
     /// optional status, default to done.
     #[arg(short, long, value_parser = parse_status, default_value_t = 1)]
     pub status: u8,
