@@ -63,8 +63,10 @@ pub fn handle_updatecmd(conn: &Connection, cmd: &UpdateCommand) -> Result<(), St
         item.content = content.clone();
     }
     if let Some(add) = &cmd.add_content {
+        use chrono::Local;
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M").to_string();
         item.content.push('\n');
-        item.content.push_str(add);
+        item.content.push_str(&format!("{} ({})", add, timestamp));
     }
     if let Some(status) = cmd.status {
         item.status = status;
@@ -144,7 +146,8 @@ mod tests {
         };
         handle_updatecmd(&conn, &update_cmd).unwrap();
         let updated_item = get_item(&conn, item_id).unwrap();
-        assert_eq!(updated_item.content, "reorganize garage thoroughly\nmove stuff to basement");
+        assert!(updated_item.content.starts_with("reorganize garage thoroughly\nmove stuff to basement ("));
+        assert!(updated_item.content.ends_with(")"));
 
         let update_cmd = UpdateCommand {
             index: 1,
