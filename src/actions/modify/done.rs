@@ -1,3 +1,5 @@
+use std::{io, io::Write};
+
 use rusqlite::Connection;
 
 use super::{get_rowid_from_cache, validate_cache};
@@ -21,9 +23,17 @@ pub fn handle_donecmd(conn: &Connection, cmd: &DoneCommand) -> Result<(), String
     if let Ok(index) = cmd.target.trim().parse::<usize>() {
         return handle_done_by_index(conn, index, cmd.status, cmd.comment.as_deref());
     }
+
+    // Reject --comment flag for interactive modes
+    if matches!(cmd.target.trim(), "today" | "overdue") && cmd.comment.is_some() {
+        return Err(
+            "--comment is not supported with 'today' or 'overdue'. Comments are added per task in the interactive flow.".to_string()
+        );
+    }
+
     match cmd.target.trim() {
-        "today" => handle_done_today(conn, cmd.status, cmd.comment.as_deref()),
-        "overdue" => handle_done_overdue(conn, cmd.status, cmd.comment.as_deref()),
+        "today" => handle_done_today(conn, cmd.status),
+        "overdue" => handle_done_overdue(conn, cmd.status),
         other => Err(format!("Unknown target '{}'. Expected an index, 'today', or 'overdue'", other)),
     }
 }
@@ -41,11 +51,7 @@ fn handle_done_by_index(
     complete_item(conn, &mut item, status, comment)
 }
 
-fn handle_done_today(
-    conn: &Connection,
-    status: u8,
-    comment: Option<&str>,
-) -> Result<(), String> {
+fn handle_done_today(conn: &Connection, status: u8) -> Result<(), String> {
     let list_cmd = ListTaskCommand {
         timestr: Some("today".to_string()),
         category: None,
@@ -56,14 +62,10 @@ fn handle_done_today(
         next_page: false,
         search: None,
     };
-    run_interactive_done(conn, &list_cmd, "No open tasks found for today", status, comment)
+    run_interactive_done(conn, &list_cmd, "No open tasks found for today", status)
 }
 
-fn handle_done_overdue(
-    conn: &Connection,
-    status: u8,
-    comment: Option<&str>,
-) -> Result<(), String> {
+fn handle_done_overdue(conn: &Connection, status: u8) -> Result<(), String> {
     let list_cmd = ListTaskCommand {
         timestr: Some("today".to_string()),
         category: None,
@@ -74,7 +76,7 @@ fn handle_done_overdue(
         next_page: false,
         search: None,
     };
-    run_interactive_done(conn, &list_cmd, "No open overdue tasks found", status, comment)
+    run_interactive_done(conn, &list_cmd, "No open overdue tasks found", status)
 }
 
 fn run_interactive_done(
@@ -82,7 +84,6 @@ fn run_interactive_done(
     list_cmd: &ListTaskCommand,
     empty_msg: &str,
     status: u8,
-    comment: Option<&str>,
 ) -> Result<(), String> {
     let (tasks, _, _) = query_all_tasks(conn, list_cmd)?;
 
@@ -105,7 +106,8 @@ fn run_interactive_done(
         match prompt_y_n_q("Done")? {
             'y' => {
                 let mut item = item.clone();
-                match complete_item(conn, &mut item, status, comment) {
+                let task_comment = prompt_optional_comment();
+                match complete_item(conn, &mut item, status, task_comment.as_deref()) {
                     Ok(()) => completed += 1,
                     Err(e) => {
                         display::print_red(&format!("Error: {}", e));
@@ -206,6 +208,15 @@ fn complete_item(
     display::print_bold("Completed Task:");
     display::print_items(std::slice::from_ref(item), false);
     Ok(())
+}
+
+fn prompt_optional_comment() -> Option<String> {
+    print!("Comment (optional): ");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let trimmed = input.trim().to_string();
+    if trimmed.is_empty() { None } else { Some(trimmed) }
 }
 
 fn pluralize(n: usize, word: &str) -> String {
