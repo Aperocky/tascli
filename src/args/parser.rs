@@ -168,7 +168,7 @@ pub struct ListRecordCommand {
     /// days of records to retrieve,
     /// e.g. 1 shows record made in the last 24 hours,
     /// value of 7 would show record made in the past week
-    #[arg(short, long, conflicts_with_all = ["starting_date", "ending_date"])]
+    #[arg(short, long, conflicts_with_all = ["starting_time", "ending_time"])]
     pub days: Option<usize>,
     /// limit the amount of records returned
     #[arg(short, long, default_value_t = 100, value_parser = validate_limit)]

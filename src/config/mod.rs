@@ -17,6 +17,11 @@ pub struct Config {
 }
 
 pub fn get_data_path() -> Result<PathBuf, String> {
+    // Allow override via environment variable for testing
+    if let Ok(db_path) = std::env::var("TASCLI_TEST_DB") {
+        return Ok(PathBuf::from(db_path));
+    }
+
     let home_dir = home::home_dir().ok_or_else(|| String::from("cannot find home directory"))?;
     let data_dir = match get_config_data_dir(home_dir.clone()) {
         Some(dir_path) => str_to_pathbuf(dir_path)?,

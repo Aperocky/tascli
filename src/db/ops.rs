@@ -156,7 +156,7 @@ pub fn get_stats(
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
-            row.get::<_, usize>(2)?,
+            row.get::<_, i64>(2)? as usize,
         ))
     })?;
 
