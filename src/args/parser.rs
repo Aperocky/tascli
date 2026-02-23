@@ -66,7 +66,9 @@ pub struct RecordCommand {
 
 #[derive(Debug, Args)]
 pub struct DoneCommand {
-    /// index from previous list command, or timestr (e.g. 'today') for interactive completion
+    /// index from previous list command;
+    /// or today for interactively completing all tasks due today;
+    /// or overdue for interactively completing all tasks overdue;
     pub target: String,
     /// optional status, default to done.
     #[arg(short, long, value_parser = parse_status, default_value_t = 1)]

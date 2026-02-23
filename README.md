@@ -81,6 +81,12 @@ tascli done 1
 
 Completing a task or a recurring tasks will generate a corresponding record.
 
+You can complete all tasks due today interactively with
+
+```bash
+tascli done today
+```
+
 Search tasks:
 ```bash
 tascli list task --search "rust"
