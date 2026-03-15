@@ -10,6 +10,7 @@ use args::parser::CliArgs;
 use clap::Parser;
 
 fn main() {
+    config::init_config();
     let cli_args = CliArgs::parse();
     let conn = match db::conn::connect() {
         Ok(conn) => conn,

@@ -1,0 +1,8 @@
+{
+    "_comment": [
+        "data_dir: override the default data directory (~/.local/share/tascli/), must be absolute or home-relative (~/).",
+        "time_format: standard (default, 12h AM/PM) | 24h (local 24-hour with colon) | military (absolute YYYY/MM/DD HHMM) | utc (UTC 24-hour with colon)"
+    ],
+    "data_dir": "",
+    "time_format": "standard"
+}

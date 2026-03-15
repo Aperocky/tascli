@@ -225,7 +225,8 @@ If storing the db file in location other than `~/.local/share/tascli/tascli.db` 
 
 ```
 {
-    "data_dir": "/where/you/want/it"
+    "data_dir": "/where/you/want/it",
+    "time_format": "standard"
 }
 ```
 

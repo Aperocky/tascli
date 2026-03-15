@@ -14,6 +14,47 @@ pub struct Config {
     /// Only supports full path.
     #[nserde(default)]
     pub data_dir: String,
+    /// Time display format: "standard" (default, 12h AM/PM), "24h" (local 24-hour), "military" (absolute YYYY/MM/DD HHMM), "utc" (UTC 24-hour).
+    #[nserde(default)]
+    pub time_format: String,
+}
+
+const DEFAULT_CONFIG: &str = include_str!("default_config.json");
+
+pub fn init_config() {
+    let home_dir = match home::home_dir() {
+        Some(d) => d,
+        None => return,
+    };
+    let config_path = CONFIG_PATH.iter().fold(home_dir, |p, d| p.join(d));
+    if config_path.exists() {
+        return;
+    }
+    if let Some(parent) = config_path.parent() {
+        if fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+    let _ = fs::write(&config_path, DEFAULT_CONFIG);
+}
+
+pub fn get_config() -> Config {
+    let home_dir = match home::home_dir() {
+        Some(d) => d,
+        None => return Config::default(),
+    };
+    let config_path = CONFIG_PATH.iter().fold(home_dir, |p, d| p.join(d));
+    if !config_path.exists() {
+        return Config::default();
+    }
+    let config_content = match fs::read_to_string(&config_path) {
+        Ok(content) => content,
+        Err(_) => return Config::default(),
+    };
+    match DeJson::deserialize_json(&config_content) {
+        Ok(config) => config,
+        Err(_) => Config::default(),
+    }
 }
 
 pub fn get_data_path() -> Result<PathBuf, String> {
@@ -70,6 +111,14 @@ pub fn str_to_pathbuf(dir_path: String) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_unknown_fields_ignored() {
+        let json = r#"{"_comment": ["a comment"], "data_dir": "", "time_format": "24h", "unknown_field": "ignored"}"#;
+        let config: Result<Config, _> = DeJson::deserialize_json(json);
+        assert!(config.is_ok(), "nanoserde should ignore unknown fields");
+        assert_eq!(config.unwrap().time_format, "24h");
+    }
 
     #[test]
     fn test_str_to_pathbuf() {

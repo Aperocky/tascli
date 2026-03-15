@@ -1,8 +1,11 @@
 use crate::{
     actions::display::{
         print_table,
+        DisplayConfig,
         DisplayRow,
+        TimeFormat,
     },
+    config,
     db::item::Item,
 };
 
@@ -25,6 +28,8 @@ pub fn print_red(text: &str) {
 
 // print items in a table.
 pub fn print_items(items: &[Item], is_list: bool) {
+    let cfg = config::get_config();
+    let dcfg = DisplayConfig { time_format: TimeFormat::from_str(&cfg.time_format) };
     let mut results: Vec<DisplayRow> = Vec::with_capacity(items.len());
 
     // Detect what types of items we have
@@ -40,9 +45,9 @@ pub fn print_items(items: &[Item], is_list: bool) {
         // Check each item's actual type instead of using a global boolean
         let item_is_record = item.action == "record" || item.action == "recurring_task_record";
         if item_is_record {
-            results.push(DisplayRow::from_record(indexstr, item));
+            results.push(DisplayRow::from_record(indexstr, item, &dcfg));
         } else {
-            results.push(DisplayRow::from_task(indexstr, item))
+            results.push(DisplayRow::from_task(indexstr, item, &dcfg))
         }
     }
 

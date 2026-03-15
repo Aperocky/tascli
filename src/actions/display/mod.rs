@@ -8,6 +8,10 @@ pub use crate::actions::display::{
         print_items,
         print_red,
     },
-    row::DisplayRow,
+    row::{
+        DisplayConfig,
+        DisplayRow,
+        TimeFormat,
+    },
     table::print_table,
 };
