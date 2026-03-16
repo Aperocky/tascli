@@ -1,5 +1,18 @@
 # Changelog
 
+### v0.13.0
+- ✨ Add `AGENTS.md` for agentic usage
+- ⚙️  Add `time_format` for multiple display time formats
+- ⚙️  Standard configuration file to be created on tool run.
+
+### v0.12.0
+- ✨ `tascli done today` to interactively complete all tasks due today
+- ✨ `tascli done overdue` to interactively complete all tasks due today and prior
+- ✨ `--comment` on `tascli update --add-content` now includes a timestamp moniker
+- ✨ Interactive batch completions to support comments
+- 🧪 Add integration tests for core workflows
+- 📦 Bump rusqlite to 0.38
+
 ### v0.11.2
 - 🐛 Fix list pagination bug where items with exact same timestamp become potentially omitted at the point of next token
 
