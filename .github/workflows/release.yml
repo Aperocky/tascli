@@ -1,0 +1,71 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-rpm:
+    name: RPM ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: x86_64
+          - target: aarch64-unknown-linux-gnu
+            arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          ${{ matrix.arch == 'aarch64' && 'sudo apt-get install -y gcc-aarch64-linux-gnu' || 'true' }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.arch == 'aarch64' && 'aarch64-linux-gnu-gcc' || '' }}
+
+      - name: Build RPM
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TOPDIR="$(mktemp -d)/rpmbuild"
+          mkdir -p "$TOPDIR"/{RPMS,SPECS}
+          cp pkg/tascli.spec "$TOPDIR/SPECS/"
+          rpmbuild -bb "$TOPDIR/SPECS/tascli.spec" \
+            --define "_topdir $TOPDIR" \
+            --define "version $VERSION" \
+            --define "source_bindir ${{ github.workspace }}/target/${{ matrix.target }}/release" \
+            --target ${{ matrix.arch }}
+          cp "$TOPDIR"/RPMS/${{ matrix.arch }}/*.rpm .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.arch }}
+          path: "*.rpm"
+
+  release:
+    needs: build-rpm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/**/*.rpm
