@@ -40,6 +40,7 @@ jobs:
       - name: Build RPM
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION//-/\~}"
           TOPDIR="$(mktemp -d)/rpmbuild"
           mkdir -p "$TOPDIR"/{RPMS,SPECS}
           cp pkg/tascli.spec "$TOPDIR/SPECS/"
