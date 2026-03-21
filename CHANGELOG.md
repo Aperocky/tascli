@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.14.0
+- ✨ `ops merge --path <db>` to merge another tascli database into the current one with automatic deduplication
+- ✨ Support multiple `-c` flags on list commands to filter by multiple categories (`tascli list task -c work -c personal`)
+- 📦 Add RPM packaging and GitHub Actions release workflow
+
 ### v0.13.0
 - ✨ Add `AGENTS.md` for agentic usage
 - ⚙️  Add `time_format` for multiple display time formats
