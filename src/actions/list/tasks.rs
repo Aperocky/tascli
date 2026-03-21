@@ -117,8 +117,8 @@ pub fn query_all_tasks(
 // Skip query for status because recurring tasks do not have status.
 fn query_recurring_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, String> {
     let mut query = ItemQuery::new().with_action(RECURRING_TASK);
-    if let Some(cat) = &cmd.category {
-        query = query.with_category(cat);
+    if !cmd.category.is_empty() {
+        query = query.with_categories(cmd.category.iter().map(|s| s.as_str()).collect());
     }
     if let Some(search_term) = &cmd.search {
         query = query.with_content_like(search_term);
@@ -202,8 +202,8 @@ fn query_tasks(conn: &Connection, cmd: &ListTaskCommand) -> Result<Vec<Item>, St
     if !cmd.overdue {
         task_query = task_query.with_target_time_min(Local::now().timestamp());
     }
-    if let Some(cat) = &cmd.category {
-        task_query = task_query.with_category(cat);
+    if !cmd.category.is_empty() {
+        task_query = task_query.with_categories(cmd.category.iter().map(|s| s.as_str()).collect());
     }
     if let Some(search_term) = &cmd.search {
         task_query = task_query.with_content_like(search_term);
@@ -251,7 +251,7 @@ mod tests {
         fn default_test() -> Self {
             ListTaskCommand {
                 timestr: None,
-                category: None,
+                category: Vec::new(),
                 days: None,
                 status: 0,
                 overdue: false,
@@ -262,7 +262,12 @@ mod tests {
         }
 
         fn with_category(mut self, category: &str) -> Self {
-            self.category = Some(category.to_string());
+            self.category = vec![category.to_string()];
+            self
+        }
+
+        fn with_categories(mut self, categories: Vec<&str>) -> Self {
+            self.category = categories.iter().map(|s| s.to_string()).collect();
             self
         }
 
@@ -730,5 +735,43 @@ mod tests {
             assert!(task.content.contains("meeting"));
             assert_eq!(task.category, "work");
         }
+    }
+
+    #[test]
+    fn test_multi_category_filter_tasks() {
+        let (conn, _temp_file) = get_test_conn();
+        insert_task(&conn, "work", "finish report", "tomorrow");
+        insert_task(&conn, "life", "grocery shopping", "tomorrow");
+        insert_task(&conn, "fun", "play games", "tomorrow");
+
+        // Single category still works
+        let single = ListTaskCommand::default_test().with_category("work");
+        let results = query_tasks(&conn, &single).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, "work");
+
+        // Multiple categories
+        let multi = ListTaskCommand::default_test().with_categories(vec!["work", "life"]);
+        let results = query_tasks(&conn, &multi).unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|t| t.category == "work" || t.category == "life"));
+
+        // No category filter returns all
+        let all = ListTaskCommand::default_test();
+        let results = query_tasks(&conn, &all).unwrap();
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn test_multi_category_filter_recurring_tasks() {
+        let (conn, _temp_file) = get_test_conn();
+        insert_recurring_task(&conn, "work", "standup", "Daily 9AM");
+        insert_recurring_task(&conn, "life", "exercise", "Daily 7AM");
+        insert_recurring_task(&conn, "fun", "gaming night", "Weekly Friday 8PM");
+
+        let multi = ListTaskCommand::default_test().with_categories(vec!["work", "fun"]);
+        let results = query_recurring_tasks(&conn, &multi).unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|t| t.category == "work" || t.category == "fun"));
     }
 }

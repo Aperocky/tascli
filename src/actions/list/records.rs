@@ -51,8 +51,8 @@ pub fn handle_listrecords(conn: &Connection, cmd: ListRecordCommand) -> Result<(
 
 fn query_records(conn: &Connection, cmd: &ListRecordCommand) -> Result<Vec<Item>, String> {
     let mut record_query = ItemQuery::new().with_actions(vec![RECORD, RECURRING_TASK_RECORD]);
-    if let Some(cat) = &cmd.category {
-        record_query = record_query.with_category(cat);
+    if !cmd.category.is_empty() {
+        record_query = record_query.with_categories(cmd.category.iter().map(|s| s.as_str()).collect());
     }
     if let Some(search_term) = &cmd.search {
         record_query = record_query.with_content_like(search_term);
@@ -98,7 +98,7 @@ mod tests {
     impl ListRecordCommand {
         fn default_test() -> Self {
             ListRecordCommand {
-                category: None,
+                category: Vec::new(),
                 days: None,
                 limit: 100,
                 starting_time: None,
@@ -109,7 +109,12 @@ mod tests {
         }
 
         fn with_category(mut self, category: &str) -> Self {
-            self.category = Some(category.to_string());
+            self.category = vec![category.to_string()];
+            self
+        }
+
+        fn with_categories(mut self, categories: Vec<&str>) -> Self {
+            self.category = categories.iter().map(|s| s.to_string()).collect();
             self
         }
 
@@ -263,5 +268,30 @@ mod tests {
         cache::clear(&conn).unwrap();
         cache::store(&conn, &results).unwrap();
         assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_multi_category_filter_records() {
+        let (conn, _temp_file) = get_test_conn();
+        insert_record(&conn, "feeding", "100ML", "yesterday 2PM");
+        insert_record(&conn, "sleep", "nap 30min", "yesterday 3PM");
+        insert_record(&conn, "exercise", "5K run", "yesterday 5PM");
+
+        // Single category
+        let single = ListRecordCommand::default_test().with_category("feeding");
+        let results = query_records(&conn, &single).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, "feeding");
+
+        // Multiple categories
+        let multi = ListRecordCommand::default_test().with_categories(vec!["feeding", "sleep"]);
+        let results = query_records(&conn, &multi).unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| r.category == "feeding" || r.category == "sleep"));
+
+        // No category filter returns all
+        let all = ListRecordCommand::default_test().with_days(2);
+        let results = query_records(&conn, &all).unwrap();
+        assert_eq!(results.len(), 3);
     }
 }

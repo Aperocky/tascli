@@ -54,7 +54,7 @@ fn handle_done_by_index(
 fn handle_done_today(conn: &Connection, status: u8) -> Result<(), String> {
     let list_cmd = ListTaskCommand {
         timestr: Some("today".to_string()),
-        category: None,
+        category: Vec::new(),
         days: None,
         status: 254,
         overdue: false,
@@ -68,7 +68,7 @@ fn handle_done_today(conn: &Connection, status: u8) -> Result<(), String> {
 fn handle_done_overdue(conn: &Connection, status: u8) -> Result<(), String> {
     let list_cmd = ListTaskCommand {
         timestr: Some("today".to_string()),
-        category: None,
+        category: Vec::new(),
         days: None,
         status: 254,
         overdue: true,

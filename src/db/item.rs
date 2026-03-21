@@ -131,6 +131,7 @@ impl Item {
 pub struct ItemQuery<'a> {
     pub actions: Option<Vec<&'a str>>,
     pub category: Option<&'a str>,
+    pub categories: Option<Vec<&'a str>>,
     pub content_like: Option<&'a str>,
     pub create_time_min: Option<i64>,
     pub create_time_max: Option<i64>,
@@ -160,6 +161,7 @@ impl<'a> ItemQuery<'a> {
         ItemQuery {
             actions: None,
             category: None,
+            categories: None,
             content_like: None,
             create_time_min: None,
             create_time_max: None,
@@ -187,6 +189,11 @@ impl<'a> ItemQuery<'a> {
 
     pub fn with_category(mut self, category: &'a str) -> Self {
         self.category = Some(category);
+        self
+    }
+
+    pub fn with_categories(mut self, categories: Vec<&'a str>) -> Self {
+        self.categories = Some(categories);
         self
     }
 

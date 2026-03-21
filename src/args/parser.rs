@@ -136,9 +136,9 @@ pub struct ListTaskCommand {
     /// when present it restrict the task listed to be those,
     /// that are marked for completion prior to this time
     pub timestr: Option<String>,
-    /// category of the task
+    /// category of the task, can be specified multiple times
     #[arg(short, long)]
-    pub category: Option<String>,
+    pub category: Vec<String>,
     /// days in the future for tasks to list - mutually exclusive with timestr
     #[arg(short, long, conflicts_with = "timestr")]
     pub days: Option<usize>,
@@ -164,9 +164,9 @@ pub struct ListTaskCommand {
 
 #[derive(Debug, Args)]
 pub struct ListRecordCommand {
-    /// category of the record
+    /// category of the record, can be specified multiple times
     #[arg(short, long)]
-    pub category: Option<String>,
+    pub category: Vec<String>,
     /// days of records to retrieve,
     /// e.g. 1 shows record made in the last 24 hours,
     /// value of 7 would show record made in the past week

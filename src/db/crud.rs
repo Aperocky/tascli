@@ -115,6 +115,16 @@ pub fn query_items(
         params.push(c.to_string());
     }
 
+    if let Some(cats) = &item_query.categories {
+        if cats.len() == 1 {
+            conditions.push("category = ?".to_string());
+            params.push(cats[0].to_string());
+        } else {
+            let cat_list = cats.iter().map(|c| format!("'{}'", c)).collect::<Vec<_>>().join(", ");
+            conditions.push(format!("category IN ({})", cat_list));
+        }
+    }
+
     if let Some(content) = item_query.content_like {
         conditions.push("content LIKE ?".to_string());
         params.push(format!("%{}%", content));
