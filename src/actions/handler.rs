@@ -31,6 +31,7 @@ pub fn handle_commands(conn: &Connection, args: CliArgs) -> Result<(), String> {
             OpsCommand::Stat(cmd) => ops::handle_statcmd(conn, &cmd),
             OpsCommand::Batch(cmd) => ops::handle_batchcmd(conn, &cmd),
             OpsCommand::Backup(cmd) => ops::handle_backupcmd(&cmd),
+            OpsCommand::Merge(cmd) => ops::handle_mergecmd(conn, &cmd),
         },
     }
 }

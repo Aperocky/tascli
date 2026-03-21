@@ -128,6 +128,8 @@ pub enum OpsCommand {
     Batch(OpsBatchCommand),
     /// backup database to specified path or default location
     Backup(OpsBackupCommand),
+    /// merge another tascli database into the current one
+    Merge(OpsMergeCommand),
 }
 
 #[derive(Debug, Args)]
@@ -263,6 +265,13 @@ pub struct OpsBackupCommand {
     /// if omitted, creates tascli_bak.db in same directory as original.
     #[arg(short, long)]
     pub path: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct OpsMergeCommand {
+    /// path to the source tascli database to merge from
+    #[arg(short, long)]
+    pub path: String,
 }
 
 fn syntax_helper(cmd: &str, s: &str) -> Result<String, String> {
