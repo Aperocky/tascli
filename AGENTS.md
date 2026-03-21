@@ -89,9 +89,8 @@ tascli list record --search "text"         # search content
 
 The typical agent workflow for task tracking:
 
-1. **Create**: `tascli task "do something" friday -c work`
-2. **Check**: `tascli list task today` — note the index
-3. **Complete**: `tascli done <index>` — this also creates a record automatically
-4. **Log directly**: `tascli record "observed something" -c work` — for things without a prior task
-
-Indexes are positional from the last `list` command and reset on each new list.
+1. **Search first**: `tascli list task --search "keyword"` — check for duplicates before creating
+2. **Create if new**: `tascli task "do something" friday -c work`
+3. **Fresh list before mutating**: `tascli list task today` — indexes are ephemeral and reset on each list, always re-list before `done`, `update`, or `delete`
+4. **Complete**: `tascli done <index>` — this also creates a record automatically
+5. **Log directly**: `tascli record "observed something" -c work` — for things without a prior task; search with `tascli list record --search "keyword"` first to avoid duplicate records
