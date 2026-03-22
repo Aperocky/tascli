@@ -1,5 +1,8 @@
 # Changelog
 
+### v0.14.1
+- ⚙️  Add a similar `SKILL.md` alongside `AGENTS.md`
+
 ### v0.14.0
 - ✨ `ops merge --path <db>` to merge another tascli database into the current one with automatic deduplication
 - ✨ Support multiple `-c` flags on list commands to filter by multiple categories (`tascli list task -c work -c personal`)
